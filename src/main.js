@@ -33,6 +33,7 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
+
   // Smooth show
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

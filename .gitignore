@@ -3,6 +3,6 @@ release/
 dist/
 out/
 *.log
+debug.log
 .DS_Store
 Thumbs.db
-src/editor/cm.js

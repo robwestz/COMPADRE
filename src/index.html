@@ -1056,7 +1056,6 @@
 // CAMPAD - Core Application
 // Architecture: Plugin-ready, modular tab system
 // ══════════════════════════════════════════════════
-
 // Destructure from the bundled CM global
 const {EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
   drawSelection, dropCursor, rectangularSelection, crosshairCursor,
@@ -1295,12 +1294,14 @@ function getEditorExtensions(langExt = []) {
         updateStatusBar();
       }
     }),
-    EditorView.domEventHandler("drop", (event) => {
-      const files = event.dataTransfer?.files;
-      if (files && files.length > 0) {
-        event.preventDefault();
-        Array.from(files).forEach(f => openFileObj(f));
-        return true;
+    EditorView.domEventHandlers({
+      drop(event) {
+        const files = event.dataTransfer?.files;
+        if (files && files.length > 0) {
+          event.preventDefault();
+          Array.from(files).forEach(f => openFileObj(f));
+          return true;
+        }
       }
     }),
   ];
