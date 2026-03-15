@@ -1,0 +1,2912 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CamPad</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg-primary: #1a1b26;
+    --bg-secondary: #16171f;
+    --bg-tertiary: #1f2029;
+    --bg-hover: #24253a;
+    --bg-active: #2a2b3d;
+    --text-primary: #c0caf5;
+    --text-secondary: #787c99;
+    --text-muted: #565869;
+    --accent: #7aa2f7;
+    --accent-dim: #3d59a1;
+    --accent-glow: rgba(122, 162, 247, 0.15);
+    --green: #9ece6a;
+    --red: #f7768e;
+    --orange: #ff9e64;
+    --yellow: #e0af68;
+    --purple: #bb9af7;
+    --cyan: #7dcfff;
+    --border: #292a37;
+    --scrollbar: #2a2b3d;
+    --scrollbar-hover: #3b3d57;
+    --tab-height: 36px;
+    --sidebar-width: 0px;
+    --statusbar-height: 26px;
+    --titlebar-height: 38px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ═══ SCROLLBAR ═══ */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+  /* ═══ TITLEBAR ═══ */
+  #titlebar {
+    height: var(--titlebar-height);
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    padding-right: 140px; /* space for native window controls */
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+    flex-shrink: 0;
+    -webkit-app-region: drag;
+  }
+  #titlebar .menu-bar, #titlebar .menu-item { -webkit-app-region: no-drag; }
+  #titlebar .logo {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    margin-right: 16px;
+  }
+  #titlebar .menu-bar {
+    display: flex;
+    gap: 2px;
+  }
+  .menu-item {
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+  }
+  .menu-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .menu-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px;
+    min-width: 220px;
+    z-index: 1000;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .menu-item.open .menu-dropdown { display: block; }
+  .menu-dropdown-item {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--text-primary);
+  }
+  .menu-dropdown-item:hover { background: var(--accent); color: #fff; }
+  .menu-dropdown-item .shortcut { color: var(--text-muted); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+  .menu-dropdown-item:hover .shortcut { color: rgba(255,255,255,0.7); }
+  .menu-sep { height: 1px; background: var(--border); margin: 4px 8px; }
+
+  /* ═══ TABS ═══ */
+  #tab-bar {
+    height: var(--tab-height);
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: flex-end;
+    padding: 0 8px;
+    gap: 1px;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  #tab-bar::-webkit-scrollbar { height: 0; }
+  .tab {
+    height: 32px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: transparent;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .tab.active {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+  }
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px 2px 0 0;
+  }
+  .tab .modified {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--orange);
+    display: none;
+  }
+  .tab.modified .modified { display: block; }
+  .tab .close-tab {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: all 0.1s;
+  }
+  .tab:hover .close-tab { opacity: 1; }
+  .tab .close-tab:hover { background: var(--red); color: #fff; opacity: 1; }
+  #add-tab {
+    width: 28px; height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-left: 4px;
+    flex-shrink: 0;
+    align-self: center;
+  }
+  #add-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  /* ═══ EDITOR AREA ═══ */
+  #editor-container {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+  #editor-wrapper {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* CodeMirror overrides */
+  .cm-editor {
+    height: 100%;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .cm-editor .cm-scroller {
+    font-family: 'JetBrains Mono', monospace !important;
+    padding: 8px 0;
+  }
+  .cm-editor .cm-content { padding: 0 16px 0 0; }
+  .cm-editor .cm-gutters {
+    background: var(--bg-primary) !important;
+    border-right: 1px solid var(--border) !important;
+    color: var(--text-muted) !important;
+    font-size: 12px;
+    padding: 0 8px;
+  }
+  .cm-editor .cm-activeLineGutter { color: var(--text-secondary) !important; background: transparent !important; }
+  .cm-editor .cm-activeLine { background: rgba(122, 162, 247, 0.05) !important; }
+  .cm-editor .cm-selectionBackground { background: rgba(122, 162, 247, 0.2) !important; }
+  .cm-editor .cm-cursor { border-left-color: var(--accent) !important; border-left-width: 2px !important; }
+  .cm-editor .cm-matchingBracket { color: var(--yellow) !important; background: rgba(224, 175, 104, 0.15) !important; outline: 1px solid rgba(224, 175, 104, 0.3); }
+  .cm-editor .cm-selectionMatch { background: rgba(122, 162, 247, 0.12) !important; }
+  .cm-editor .cm-searchMatch { background: rgba(224, 175, 104, 0.3) !important; }
+  .cm-editor .cm-searchMatch-selected { background: rgba(224, 175, 104, 0.5) !important; }
+  .cm-focused { outline: none !important; }
+  .cm-editor .cm-foldGutter span { color: var(--text-muted); }
+  .cm-editor .cm-foldPlaceholder { background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-secondary); padding: 0 6px; border-radius: 3px; }
+
+  /* Syntax Highlighting - Tokyo Night */
+  .ͼ1 .tok-keyword { color: var(--purple) !important; }
+  .ͼ1 .tok-string, .ͼ1 .tok-string2 { color: var(--green) !important; }
+  .ͼ1 .tok-number { color: var(--orange) !important; }
+  .ͼ1 .tok-comment { color: var(--text-muted) !important; font-style: italic; }
+  .ͼ1 .tok-variableName { color: var(--text-primary) !important; }
+  .ͼ1 .tok-typeName { color: var(--cyan) !important; }
+  .ͼ1 .tok-propertyName { color: var(--accent) !important; }
+  .ͼ1 .tok-operator { color: var(--cyan) !important; }
+  .ͼ1 .tok-bool { color: var(--orange) !important; }
+  .ͼ1 .tok-function { color: var(--accent) !important; }
+  .ͼ1 .tok-definition { color: var(--accent) !important; }
+  .ͼ1 .tok-tagName { color: var(--red) !important; }
+  .ͼ1 .tok-attributeName { color: var(--purple) !important; }
+  .ͼ1 .tok-attributeValue { color: var(--green) !important; }
+  .ͼ1 .tok-meta { color: var(--text-secondary) !important; }
+  .ͼ1 .tok-punctuation { color: var(--text-secondary) !important; }
+
+  /* ═══ COMMAND PALETTE ═══ */
+  #command-palette-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 2000;
+    justify-content: center;
+    padding-top: 15vh;
+  }
+  #command-palette-overlay.open { display: flex; }
+  #command-palette {
+    width: 520px;
+    max-height: 380px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 16px 64px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    align-self: flex-start;
+  }
+  #command-palette input {
+    width: 100%;
+    padding: 14px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    outline: none;
+  }
+  #command-palette input::placeholder { color: var(--text-muted); }
+  #command-results {
+    overflow-y: auto;
+    padding: 4px;
+    flex: 1;
+  }
+  .command-result {
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .command-result:hover, .command-result.selected { background: var(--accent); color: #fff; }
+  .command-result .cmd-name { font-size: 13px; }
+  .command-result .cmd-shortcut { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); }
+  .command-result.selected .cmd-shortcut, .command-result:hover .cmd-shortcut { color: rgba(255,255,255,0.7); }
+
+  /* ═══ FIND/REPLACE BAR ═══ */
+  #find-bar {
+    display: none;
+    position: absolute;
+    top: 0;
+    right: 24px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 10px 14px;
+    z-index: 100;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    gap: 8px;
+    flex-direction: column;
+  }
+  #find-bar.open { display: flex; }
+  #find-bar .find-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #find-bar input {
+    padding: 5px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    width: 240px;
+  }
+  #find-bar input:focus { border-color: var(--accent); }
+  #find-bar button {
+    padding: 4px 8px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  #find-bar button:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .find-info { font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+  .find-toggle {
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    background: transparent;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .find-toggle.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-glow); }
+
+  /* ═══ STATUS BAR ═══ */
+  #statusbar {
+    height: var(--statusbar-height);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    user-select: none;
+  }
+  #statusbar .left, #statusbar .right { display: flex; gap: 16px; align-items: center; }
+  .status-item { display: flex; align-items: center; gap: 4px; }
+  .status-item.clickable { cursor: pointer; }
+  .status-item.clickable:hover { color: var(--text-primary); }
+  .status-accent { color: var(--accent); }
+
+  /* ═══ MINIMAP ═══ */
+  #minimap {
+    width: 80px;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    cursor: pointer;
+    display: none;
+  }
+  #minimap.visible { display: block; }
+  #minimap canvas { width: 100%; height: 100%; }
+  #minimap-viewport {
+    position: absolute;
+    left: 0; right: 0;
+    background: rgba(122, 162, 247, 0.08);
+    border: 1px solid rgba(122, 162, 247, 0.15);
+    pointer-events: none;
+  }
+
+  /* ═══ WELCOME SCREEN ═══ */
+  .welcome-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    color: var(--text-muted);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .welcome-screen .logo-big {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 42px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 4px;
+    opacity: 0.3;
+  }
+  .welcome-screen .shortcuts {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
+    opacity: 0.4;
+  }
+  .welcome-screen .shortcuts span {
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    gap: 12px;
+  }
+  .welcome-screen .shortcuts .key {
+    color: var(--accent);
+    min-width: 100px;
+    text-align: right;
+  }
+
+  /* ═══ NOTIFICATION TOAST ═══ */
+  #toast-container {
+    position: fixed;
+    bottom: 40px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 3000;
+  }
+  .toast {
+    padding: 10px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text-primary);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    animation: slideIn 0.2s ease-out, fadeOut 0.3s ease-in 2.5s forwards;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error { border-left: 3px solid var(--red); }
+  .toast.info { border-left: 3px solid var(--accent); }
+
+  /* ═══ UPDATE DIALOG ═══ */
+  #update-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+  }
+  #update-overlay.visible { display: flex; }
+  #update-dialog {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    width: 420px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  }
+  #update-dialog h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); }
+  #update-dialog .update-info { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
+  #update-dialog .update-version { color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+  #update-dialog .update-notes {
+    background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;
+    max-height: 200px; overflow-y: auto; white-space: pre-wrap; font-family: 'JetBrains Mono', monospace;
+  }
+  #update-dialog .update-progress { height: 4px; background: var(--bg-primary); border-radius: 2px; margin-bottom: 16px; overflow: hidden; }
+  #update-dialog .update-progress-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; width: 0%; }
+  #update-dialog .update-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  #update-dialog button {
+    padding: 6px 16px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-hover); color: var(--text-primary); font-size: 13px;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+  }
+  #update-dialog button:hover { background: var(--bg-active); }
+  #update-dialog button.primary { background: var(--accent); color: #1a1b26; border-color: var(--accent); font-weight: 600; }
+  #update-dialog button.primary:hover { opacity: 0.9; }
+  #update-badge {
+    display: none; background: var(--green); color: #1a1b26; font-size: 9px; font-weight: 700;
+    padding: 1px 5px; border-radius: 8px; cursor: pointer; margin-left: 4px;
+  }
+  #update-badge.visible { display: inline-block; }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes fadeOut { to { opacity: 0; transform: translateY(10px); } }
+
+  /* ═══ GOTO LINE DIALOG ═══ */
+  #goto-line-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 2000;
+    justify-content: center;
+    padding-top: 20vh;
+  }
+  #goto-line-overlay.open { display: flex; }
+  #goto-line-box {
+    width: 340px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 16px 64px rgba(0,0,0,0.6);
+    padding: 16px;
+    align-self: flex-start;
+  }
+  #goto-line-box label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: block;
+    margin-bottom: 8px;
+  }
+  #goto-line-box input {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    outline: none;
+  }
+  #goto-line-box input:focus { border-color: var(--accent); }
+
+  /* Language selector */
+  #lang-selector {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 2000;
+    justify-content: center;
+    padding-top: 15vh;
+  }
+  #lang-selector.open { display: flex; }
+  #lang-selector-box {
+    width: 360px;
+    max-height: 400px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 16px 64px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    align-self: flex-start;
+  }
+  #lang-selector-box input {
+    width: 100%;
+    padding: 14px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    outline: none;
+  }
+  #lang-list {
+    overflow-y: auto;
+    padding: 4px;
+    flex: 1;
+  }
+  .lang-option {
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .lang-option:hover, .lang-option.selected { background: var(--accent); color: #fff; }
+
+  /* ═══ RIGHT PANEL (Inspector/Hex/Strings/Encoding) ═══ */
+  #right-panel {
+    width: 420px;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border);
+    display: none;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  #right-panel.open { display: flex; }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .panel-header .close-panel {
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 16px;
+    width: 20px; height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+  }
+  .panel-header .close-panel:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-tab {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .panel-tab:hover { color: var(--text-primary); }
+  .panel-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .panel-content::-webkit-scrollbar { width: 6px; }
+  .panel-section { margin-bottom: 12px; }
+  .panel-section-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .panel-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    color: var(--text-secondary);
+  }
+  .panel-row .label { color: var(--text-muted); }
+  .panel-row .value { color: var(--text-primary); text-align: right; word-break: break-all; max-width: 240px; }
+  .panel-row .value.warn { color: var(--orange); }
+  .panel-row .value.danger { color: var(--red); }
+  .panel-row .value.safe { color: var(--green); }
+  .panel-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .panel-badge.red { background: rgba(247, 118, 142, 0.15); color: var(--red); }
+  .panel-badge.orange { background: rgba(255, 158, 100, 0.15); color: var(--orange); }
+  .panel-badge.green { background: rgba(158, 206, 106, 0.15); color: var(--green); }
+  .panel-badge.blue { background: rgba(122, 162, 247, 0.15); color: var(--accent); }
+  .panel-badge.purple { background: rgba(187, 154, 247, 0.15); color: var(--purple); }
+
+  /* Hex view inside panel */
+  .hex-view {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    line-height: 1.5;
+    white-space: pre;
+    color: var(--text-secondary);
+    overflow-x: auto;
+  }
+  .hex-view .hex-offset { color: var(--text-muted); }
+  .hex-view .hex-byte { color: var(--text-primary); }
+  .hex-view .hex-byte.null { color: var(--text-muted); opacity: 0.4; }
+  .hex-view .hex-byte.printable { color: var(--accent); }
+  .hex-view .hex-byte.high { color: var(--orange); }
+  .hex-view .hex-ascii { color: var(--green); margin-left: 8px; }
+
+  /* Findings list */
+  .finding-item {
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    border-left: 3px solid var(--border);
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+  .finding-item:hover { background: var(--bg-hover); }
+  .finding-item.severity-high { border-left-color: var(--red); }
+  .finding-item.severity-medium { border-left-color: var(--orange); }
+  .finding-item.severity-low { border-left-color: var(--yellow); }
+  .finding-item.severity-info { border-left-color: var(--accent); }
+  .finding-title { font-size: 11px; color: var(--text-primary); font-weight: 500; }
+  .finding-detail { font-size: 10px; color: var(--text-muted); margin-top: 2px; word-break: break-all; }
+  .finding-line { font-size: 10px; color: var(--text-muted); }
+
+  /* Encoding converter */
+  .encode-area {
+    width: 100%;
+    padding: 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    resize: vertical;
+    min-height: 60px;
+    margin-bottom: 6px;
+    outline: none;
+  }
+  .encode-area:focus { border-color: var(--accent); }
+  .encode-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .encode-btn {
+    padding: 3px 8px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .encode-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Scratch Pad */
+  #scratch-pad-area {
+    width: 100%;
+    flex: 1;
+    padding: 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+  }
+  #scratch-pad-area:focus { border-color: var(--accent); }
+  .scratch-header-actions { display: flex; gap: 4px; }
+  .scratch-btn {
+    padding: 2px 6px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .scratch-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Entropy bar */
+  .entropy-bar-container {
+    height: 8px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .entropy-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+</style>
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div id="titlebar">
+  <div class="logo">CAMPAD</div>
+  <div class="menu-bar">
+    <div class="menu-item" data-menu="file">
+      File
+      <div class="menu-dropdown">
+        <div class="menu-dropdown-item" data-action="newFile">New File <span class="shortcut">Ctrl+N</span></div>
+        <div class="menu-dropdown-item" data-action="openFile">Open File <span class="shortcut">Ctrl+O</span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-dropdown-item" data-action="save">Save <span class="shortcut">Ctrl+S</span></div>
+        <div class="menu-dropdown-item" data-action="saveAs">Save As <span class="shortcut">Ctrl+Shift+S</span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-dropdown-item" data-action="closeTab">Close Tab <span class="shortcut">Ctrl+W</span></div>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="edit">
+      Edit
+      <div class="menu-dropdown">
+        <div class="menu-dropdown-item" data-action="undo">Undo <span class="shortcut">Ctrl+Z</span></div>
+        <div class="menu-dropdown-item" data-action="redo">Redo <span class="shortcut">Ctrl+Y</span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-dropdown-item" data-action="find">Find <span class="shortcut">Ctrl+F</span></div>
+        <div class="menu-dropdown-item" data-action="replace">Find & Replace <span class="shortcut">Ctrl+H</span></div>
+        <div class="menu-dropdown-item" data-action="gotoLine">Go to Line <span class="shortcut">Ctrl+G</span></div>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="view">
+      View
+      <div class="menu-dropdown">
+        <div class="menu-dropdown-item" data-action="toggleMinimap">Toggle Minimap</div>
+        <div class="menu-dropdown-item" data-action="toggleWordWrap">Toggle Word Wrap</div>
+        <div class="menu-dropdown-item" data-action="zoomIn">Zoom In <span class="shortcut">Ctrl+=</span></div>
+        <div class="menu-dropdown-item" data-action="zoomOut">Zoom Out <span class="shortcut">Ctrl+-</span></div>
+        <div class="menu-dropdown-item" data-action="resetZoom">Reset Zoom <span class="shortcut">Ctrl+0</span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-dropdown-item" data-action="commandPalette">Command Palette <span class="shortcut">Ctrl+Shift+P</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div id="tab-bar">
+  <div id="add-tab" title="New Tab (Ctrl+N)">+</div>
+</div>
+
+<!-- EDITOR AREA -->
+<div id="editor-container">
+  <div id="editor-wrapper">
+    <div id="editor"></div>
+    <!-- Find/Replace -->
+    <div id="find-bar">
+      <div class="find-row">
+        <input type="text" id="find-input" placeholder="Find..." />
+        <div class="find-toggle" id="find-regex" title="Regex">.*</div>
+        <div class="find-toggle" id="find-case" title="Match Case">Aa</div>
+        <div class="find-toggle" id="find-word" title="Whole Word">W</div>
+        <span class="find-info" id="find-count"></span>
+        <button id="find-prev">↑</button>
+        <button id="find-next">↓</button>
+        <button id="find-close">✕</button>
+      </div>
+      <div class="find-row" id="replace-row" style="display:none;">
+        <input type="text" id="replace-input" placeholder="Replace..." />
+        <button id="replace-one">Replace</button>
+        <button id="replace-all">All</button>
+      </div>
+    </div>
+  </div>
+  <div id="minimap"><canvas id="minimap-canvas"></canvas><div id="minimap-viewport"></div></div>
+  <!-- RIGHT PANEL: Inspector / Hex / Strings / Encoding / Notes -->
+  <div id="right-panel">
+    <div class="panel-header">
+      <span id="panel-title">Inspect</span>
+      <span class="close-panel" id="close-right-panel">×</span>
+    </div>
+    <div class="panel-tabs">
+      <div class="panel-tab active" data-panel="inspect">Inspect</div>
+      <div class="panel-tab" data-panel="hex">Hex</div>
+      <div class="panel-tab" data-panel="strings">Scan</div>
+      <div class="panel-tab" data-panel="encoding">Encode</div>
+      <div class="panel-tab" data-panel="scratch">Notes</div>
+    </div>
+    <!-- INSPECT TAB -->
+    <div class="panel-content" id="panel-inspect">
+      <div class="panel-section">
+        <div class="panel-section-title">File Identity</div>
+        <div class="panel-row"><span class="label">Name</span><span class="value" id="pi-name">—</span></div>
+        <div class="panel-row"><span class="label">Size</span><span class="value" id="pi-size">—</span></div>
+        <div class="panel-row"><span class="label">Lines</span><span class="value" id="pi-lines">—</span></div>
+        <div class="panel-row"><span class="label">Characters</span><span class="value" id="pi-chars">—</span></div>
+        <div class="panel-row"><span class="label">Words</span><span class="value" id="pi-words">—</span></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-title">Magic Bytes / True Type</div>
+        <div class="panel-row"><span class="label">Extension says</span><span class="value" id="pi-ext">—</span></div>
+        <div class="panel-row"><span class="label">Magic says</span><span class="value" id="pi-magic">—</span></div>
+        <div class="panel-row"><span class="label">Match</span><span class="value" id="pi-match">—</span></div>
+        <div class="panel-row"><span class="label">First 16 bytes</span><span class="value" id="pi-bytes">—</span></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-title">Entropy Analysis</div>
+        <div class="panel-row"><span class="label">Shannon entropy</span><span class="value" id="pi-entropy">—</span></div>
+        <div class="panel-row"><span class="label">Assessment</span><span class="value" id="pi-entropy-assess">—</span></div>
+        <div class="entropy-bar-container"><div class="entropy-bar" id="pi-entropy-bar"></div></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-title">Encoding Detection</div>
+        <div class="panel-row"><span class="label">Detected</span><span class="value" id="pi-encoding">—</span></div>
+        <div class="panel-row"><span class="label">BOM</span><span class="value" id="pi-bom">—</span></div>
+        <div class="panel-row"><span class="label">Null bytes</span><span class="value" id="pi-nulls">—</span></div>
+        <div class="panel-row"><span class="label">Non-ASCII</span><span class="value" id="pi-nonascii">—</span></div>
+        <div class="panel-row"><span class="label">High entropy blocks</span><span class="value" id="pi-highent">—</span></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-title">Quick Summary</div>
+        <div id="pi-summary" style="color: var(--text-secondary); font-size: 11px;"></div>
+      </div>
+    </div>
+    <!-- HEX TAB -->
+    <div class="panel-content" id="panel-hex" style="display:none;">
+      <div style="margin-bottom: 8px; display: flex; gap: 4px; align-items: center;">
+        <span style="color:var(--text-muted); font-size:10px;">Showing first 4KB — </span>
+        <button class="encode-btn" id="hex-copy-btn">Copy hex</button>
+        <button class="encode-btn" id="hex-export-btn">Export to LLM</button>
+      </div>
+      <div class="hex-view" id="hex-content"></div>
+    </div>
+    <!-- SCAN/STRINGS TAB -->
+    <div class="panel-content" id="panel-strings" style="display:none;">
+      <div style="margin-bottom: 8px; display: flex; gap: 4px; flex-wrap: wrap;">
+        <button class="encode-btn" id="scan-all-btn">🔍 Full Scan</button>
+        <button class="encode-btn" id="scan-export-btn">📋 Copy Report</button>
+      </div>
+      <div id="scan-summary" style="margin-bottom: 8px;"></div>
+      <div id="scan-results"></div>
+    </div>
+    <!-- ENCODING TAB -->
+    <div class="panel-content" id="panel-encoding" style="display:none;">
+      <div class="panel-section-title">Input (paste or use selection)</div>
+      <textarea class="encode-area" id="encode-input" rows="3" placeholder="Paste text or select in editor..."></textarea>
+      <div class="panel-section-title">Decode</div>
+      <div class="encode-buttons">
+        <button class="encode-btn" data-decode="base64">Base64 →</button>
+        <button class="encode-btn" data-decode="url">URL →</button>
+        <button class="encode-btn" data-decode="html">HTML entities →</button>
+        <button class="encode-btn" data-decode="hex">Hex →</button>
+        <button class="encode-btn" data-decode="unicode">Unicode esc →</button>
+        <button class="encode-btn" data-decode="rot13">ROT13</button>
+        <button class="encode-btn" data-decode="reverse">Reverse</button>
+      </div>
+      <div class="panel-section-title">Encode</div>
+      <div class="encode-buttons">
+        <button class="encode-btn" data-encode="base64">→ Base64</button>
+        <button class="encode-btn" data-encode="url">→ URL</button>
+        <button class="encode-btn" data-encode="html">→ HTML ent.</button>
+        <button class="encode-btn" data-encode="hex">→ Hex</button>
+        <button class="encode-btn" data-encode="unicode">→ Unicode esc</button>
+        <button class="encode-btn" data-encode="binary">→ Binary</button>
+      </div>
+      <div class="panel-section-title">Result</div>
+      <textarea class="encode-area" id="encode-output" rows="3" readonly placeholder="Output appears here..."></textarea>
+      <button class="encode-btn" id="encode-copy-result">Copy result</button>
+      <button class="encode-btn" id="encode-swap">↕ Swap input/output</button>
+    </div>
+    <!-- SCRATCH PAD TAB -->
+    <div class="panel-content" id="panel-scratch" style="display:none; flex-direction: column;">
+      <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size:10px; color:var(--text-muted);">Persistent notes (auto-saved)</span>
+        <div class="scratch-header-actions">
+          <button class="scratch-btn" id="scratch-timestamp">+ Time</button>
+          <button class="scratch-btn" id="scratch-clear">Clear</button>
+        </div>
+      </div>
+      <textarea id="scratch-pad-area" placeholder="Quick notes, snippets, TODOs...&#10;&#10;These persist across sessions via localStorage."></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <div class="left">
+    <span class="status-item" id="status-file">Untitled-1</span>
+  </div>
+  <div class="right">
+    <span class="status-item" id="status-modified"></span>
+    <span class="status-item" id="status-selection"></span>
+    <span class="status-item" id="status-cursor">Ln 1, Col 1</span>
+    <span class="status-item clickable" id="status-lang" title="Change Language">Plain Text</span>
+    <span class="status-item clickable" id="status-encoding">UTF-8</span>
+    <span class="status-item clickable" id="status-eol">LF</span>
+    <span class="status-item" id="status-indent">Spaces: 2</span>
+    <span id="update-badge" title="Update available">UPDATE</span>
+  </div>
+</div>
+
+<!-- COMMAND PALETTE -->
+<div id="command-palette-overlay">
+  <div id="command-palette">
+    <input type="text" id="command-input" placeholder="Type a command..." autocomplete="off" />
+    <div id="command-results"></div>
+  </div>
+</div>
+
+<!-- GOTO LINE -->
+<div id="goto-line-overlay">
+  <div id="goto-line-box">
+    <label>Go to Line (type : for column, e.g. 42:10)</label>
+    <input type="text" id="goto-line-input" placeholder="Line number..." autocomplete="off" />
+  </div>
+</div>
+
+<!-- LANGUAGE SELECTOR -->
+<div id="lang-selector">
+  <div id="lang-selector-box">
+    <input type="text" id="lang-search-input" placeholder="Select language..." autocomplete="off" />
+    <div id="lang-list"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast-container"></div>
+
+<!-- UPDATE DIALOG -->
+<div id="update-overlay">
+  <div id="update-dialog">
+    <h3 id="update-title">Uppdatering</h3>
+    <div class="update-info" id="update-info"></div>
+    <div class="update-notes" id="update-notes" style="display:none"></div>
+    <div class="update-progress" id="update-progress" style="display:none">
+      <div class="update-progress-bar" id="update-progress-bar"></div>
+    </div>
+    <div class="update-actions" id="update-actions"></div>
+  </div>
+</div>
+
+<!-- Hidden file input -->
+<input type="file" id="file-picker" style="display:none" multiple />
+
+<!-- CodeMirror 6 via CDN -->
+<script src="editor/cm.js"></script>
+<script>
+// ══════════════════════════════════════════════════
+// CAMPAD - Core Application
+// Architecture: Plugin-ready, modular tab system
+// ══════════════════════════════════════════════════
+
+// Destructure from the bundled CM global
+const {EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
+  drawSelection, dropCursor, rectangularSelection, crosshairCursor,
+  highlightSpecialChars,
+  EditorState, Compartment,
+  defaultKeymap, history, historyKeymap, indentWithTab,
+  syntaxHighlighting, defaultHighlightStyle, indentOnInput,
+  bracketMatching, foldGutter, foldKeymap, HighlightStyle,
+  tags,
+  searchKeymap, highlightSelectionMatches,
+  autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap,
+  javascript, html: htmlLang, css: cssLang, json: jsonLang,
+  markdown, python, xml, sql, php} = CM;
+
+// ══════════════════════════════════════════════════
+// LANGUAGE REGISTRY (extensible)
+// ══════════════════════════════════════════════════
+const LANGUAGES = {
+  'Plain Text':  { ext: ['.txt', '.log', '.text'], lang: null },
+  'JavaScript':  { ext: ['.js', '.mjs', '.cjs', '.jsx'], lang: javascript },
+  'TypeScript':  { ext: ['.ts', '.tsx'], lang: () => javascript({typescript: true}) },
+  'HTML':        { ext: ['.html', '.htm', '.svg'], lang: htmlLang },
+  'CSS':         { ext: ['.css', '.scss', '.less'], lang: cssLang },
+  'JSON':        { ext: ['.json', '.jsonc'], lang: jsonLang },
+  'Markdown':    { ext: ['.md', '.mdx', '.markdown'], lang: markdown },
+  'Python':      { ext: ['.py', '.pyw'], lang: python },
+  'XML':         { ext: ['.xml', '.xsl', '.xsd', '.wsdl'], lang: xml },
+  'SQL':         { ext: ['.sql'], lang: sql },
+  'PHP':         { ext: ['.php'], lang: php },
+};
+
+function detectLanguage(filename) {
+  if (!filename) return 'Plain Text';
+  const ext = '.' + filename.split('.').pop().toLowerCase();
+  for (const [name, cfg] of Object.entries(LANGUAGES)) {
+    if (cfg.ext.includes(ext)) return name;
+  }
+  return 'Plain Text';
+}
+
+function getLanguageExtension(langName) {
+  const cfg = LANGUAGES[langName];
+  if (!cfg || !cfg.lang) return [];
+  const fn = cfg.lang;
+  return [fn()];
+}
+
+// ══════════════════════════════════════════════════
+// TOKYO NIGHT THEME
+// ══════════════════════════════════════════════════
+const tokyoNightTheme = EditorView.theme({
+  "&": { backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" },
+  ".cm-content": { caretColor: "var(--accent)" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--accent)" },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+    backgroundColor: "rgba(122, 162, 247, 0.2)"
+  },
+  ".cm-gutters": { backgroundColor: "var(--bg-primary)", color: "var(--text-muted)", border: "none" },
+  ".cm-activeLineGutter": { backgroundColor: "transparent" },
+  ".cm-foldPlaceholder": { backgroundColor: "var(--bg-hover)", border: "1px solid var(--border)" }
+}, {dark: true});
+
+const tokyoNightHighlight = HighlightStyle.define([
+  {tag: tags.keyword, color: "var(--purple)"},
+  {tag: tags.string, color: "var(--green)"},
+  {tag: tags.number, color: "var(--orange)"},
+  {tag: tags.bool, color: "var(--orange)"},
+  {tag: tags.comment, color: "var(--text-muted)", fontStyle: "italic"},
+  {tag: tags.variableName, color: "var(--text-primary)"},
+  {tag: tags.definition(tags.variableName), color: "var(--accent)"},
+  {tag: tags.function(tags.variableName), color: "var(--accent)"},
+  {tag: tags.typeName, color: "var(--cyan)"},
+  {tag: tags.className, color: "var(--cyan)"},
+  {tag: tags.propertyName, color: "var(--accent)"},
+  {tag: tags.operator, color: "var(--cyan)"},
+  {tag: tags.tagName, color: "var(--red)"},
+  {tag: tags.attributeName, color: "var(--purple)"},
+  {tag: tags.attributeValue, color: "var(--green)"},
+  {tag: tags.meta, color: "var(--text-secondary)"},
+  {tag: tags.punctuation, color: "var(--text-secondary)"},
+  {tag: tags.regexp, color: "var(--orange)"},
+  {tag: tags.self, color: "var(--red)"},
+  {tag: tags.null, color: "var(--orange)"},
+  {tag: tags.atom, color: "var(--orange)"},
+]);
+
+// ══════════════════════════════════════════════════
+// TAB SYSTEM
+// ══════════════════════════════════════════════════
+let tabs = [];
+let activeTabId = null;
+let tabCounter = 0;
+
+const languageCompartment = new Compartment();
+const wordWrapCompartment = new Compartment();
+
+function createTab(filename, content = '', fileHandle = null) {
+  const id = ++tabCounter;
+  const lang = detectLanguage(filename);
+  const tab = {
+    id,
+    filename: filename || `Untitled-${id}`,
+    content,
+    language: lang,
+    modified: false,
+    fileHandle,
+    scrollPos: null,
+    cursorPos: null,
+    state: null
+  };
+  tabs.push(tab);
+  renderTabs();
+  switchTab(id);
+  return tab;
+}
+
+function switchTab(id) {
+  // Save current tab state
+  if (activeTabId && window.editorView) {
+    const current = tabs.find(t => t.id === activeTabId);
+    if (current) {
+      current.state = window.editorView.state;
+      current.content = window.editorView.state.doc.toString();
+    }
+  }
+
+  activeTabId = id;
+  const tab = tabs.find(t => t.id === id);
+  if (!tab) return;
+
+  // Restore or create editor state
+  if (tab.state) {
+    window.editorView.setState(tab.state);
+  } else {
+    const langExt = getLanguageExtension(tab.language);
+    const state = EditorState.create({
+      doc: tab.content,
+      extensions: getEditorExtensions(langExt)
+    });
+    window.editorView.setState(state);
+  }
+
+  updateStatusBar();
+  renderTabs();
+  window.editorView.focus();
+}
+
+function closeTab(id) {
+  const idx = tabs.findIndex(t => t.id === id);
+  if (idx === -1) return;
+
+  const tab = tabs[idx];
+  if (tab.modified) {
+    if (!confirm(`"${tab.filename}" has unsaved changes. Close anyway?`)) return;
+  }
+
+  tabs.splice(idx, 1);
+  if (tabs.length === 0) {
+    createTab();
+  } else if (activeTabId === id) {
+    const newIdx = Math.min(idx, tabs.length - 1);
+    switchTab(tabs[newIdx].id);
+  }
+  renderTabs();
+}
+
+function renderTabs() {
+  const bar = document.getElementById('tab-bar');
+  const addBtn = document.getElementById('add-tab');
+  bar.querySelectorAll('.tab').forEach(el => el.remove());
+
+  tabs.forEach(tab => {
+    const el = document.createElement('div');
+    el.className = 'tab' + (tab.id === activeTabId ? ' active' : '') + (tab.modified ? ' modified' : '');
+    el.innerHTML = `
+      <span class="modified"></span>
+      <span class="tab-name">${tab.filename}</span>
+      <span class="close-tab">×</span>
+    `;
+    el.querySelector('.tab-name').onclick = () => switchTab(tab.id);
+    el.querySelector('.close-tab').onclick = (e) => { e.stopPropagation(); closeTab(tab.id); };
+    // Middle click to close
+    el.onmousedown = (e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.id); } };
+    bar.insertBefore(el, addBtn);
+  });
+}
+
+// ══════════════════════════════════════════════════
+// EDITOR SETUP
+// ══════════════════════════════════════════════════
+let wordWrapEnabled = false;
+let fontSize = 14;
+
+function getEditorExtensions(langExt = []) {
+  return [
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    highlightSpecialChars(),
+    history(),
+    foldGutter(),
+    drawSelection(),
+    dropCursor(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    bracketMatching(),
+    closeBrackets(),
+    autocompletion(),
+    rectangularSelection(),
+    crosshairCursor(),
+    highlightActiveLine(),
+    highlightSelectionMatches(),
+    tokyoNightTheme,
+    syntaxHighlighting(tokyoNightHighlight),
+    syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
+    languageCompartment.of(langExt),
+    wordWrapCompartment.of(wordWrapEnabled ? EditorView.lineWrapping : []),
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...historyKeymap,
+      ...foldKeymap,
+      ...completionKeymap,
+      indentWithTab,
+    ]),
+    EditorView.updateListener.of(update => {
+      if (update.docChanged) {
+        const tab = tabs.find(t => t.id === activeTabId);
+        if (tab && !tab.modified) {
+          tab.modified = true;
+          renderTabs();
+          updateStatusBar();
+        }
+      }
+      if (update.selectionSet || update.docChanged) {
+        updateStatusBar();
+      }
+    }),
+    EditorView.domEventHandler("drop", (event) => {
+      const files = event.dataTransfer?.files;
+      if (files && files.length > 0) {
+        event.preventDefault();
+        Array.from(files).forEach(f => openFileObj(f));
+        return true;
+      }
+    }),
+  ];
+}
+
+// Initialize editor
+const initialState = EditorState.create({
+  doc: '',
+  extensions: getEditorExtensions()
+});
+
+window.editorView = new EditorView({
+  state: initialState,
+  parent: document.getElementById('editor')
+});
+
+// Create first tab
+createTab();
+
+// ══════════════════════════════════════════════════
+// FILE OPERATIONS
+// ══════════════════════════════════════════════════
+
+async function openFileObj(file) {
+  const content = await file.text();
+  createTab(file.name, content);
+  toast(`Opened ${file.name}`, 'success');
+}
+
+document.getElementById('file-picker').addEventListener('change', async (e) => {
+  for (const file of e.target.files) {
+    await openFileObj(file);
+  }
+  e.target.value = '';
+});
+
+function openFile() {
+  document.getElementById('file-picker').click();
+}
+
+function save() {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (!tab) return;
+  tab.content = window.editorView.state.doc.toString();
+  downloadFile(tab.filename, tab.content);
+  tab.modified = false;
+  renderTabs();
+  updateStatusBar();
+  toast(`Saved ${tab.filename}`, 'success');
+}
+
+function saveAs() {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (!tab) return;
+  const name = prompt('Save as:', tab.filename);
+  if (!name) return;
+  tab.filename = name;
+  tab.language = detectLanguage(name);
+  tab.content = window.editorView.state.doc.toString();
+  downloadFile(name, tab.content);
+  tab.modified = false;
+  changeLanguage(tab.language);
+  renderTabs();
+  updateStatusBar();
+  toast(`Saved as ${name}`, 'success');
+}
+
+function downloadFile(filename, content) {
+  const blob = new Blob([content], {type: 'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// Drag & drop on window
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const files = e.dataTransfer?.files;
+  if (files) Array.from(files).forEach(f => openFileObj(f));
+});
+
+// ══════════════════════════════════════════════════
+// FIND / REPLACE
+// ══════════════════════════════════════════════════
+let findOpen = false;
+let replaceOpen = false;
+let findMatches = [];
+let findIdx = -1;
+let findCaseSensitive = false;
+let findRegex = false;
+let findWholeWord = false;
+
+function toggleFind(withReplace = false) {
+  findOpen = !findOpen || (withReplace && !replaceOpen);
+  replaceOpen = withReplace;
+  const bar = document.getElementById('find-bar');
+  const row = document.getElementById('replace-row');
+  if (findOpen) {
+    bar.classList.add('open');
+    row.style.display = replaceOpen ? 'flex' : 'none';
+    const inp = document.getElementById('find-input');
+    inp.focus();
+    // pre-fill with selection
+    const sel = window.editorView.state.sliceDoc(
+      window.editorView.state.selection.main.from,
+      window.editorView.state.selection.main.to
+    );
+    if (sel && sel.length < 200) inp.value = sel;
+    doFind();
+  } else {
+    bar.classList.remove('open');
+    clearFindHighlights();
+  }
+}
+
+function doFind() {
+  const query = document.getElementById('find-input').value;
+  if (!query) { findMatches = []; updateFindCount(); clearFindHighlights(); return; }
+
+  const doc = window.editorView.state.doc.toString();
+  findMatches = [];
+
+  try {
+    let regex;
+    if (findRegex) {
+      regex = new RegExp(query, findCaseSensitive ? 'g' : 'gi');
+    } else {
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = findWholeWord ? `\\b${escaped}\\b` : escaped;
+      regex = new RegExp(pattern, findCaseSensitive ? 'g' : 'gi');
+    }
+    let match;
+    while ((match = regex.exec(doc)) !== null) {
+      findMatches.push({from: match.index, to: match.index + match[0].length});
+      if (findMatches.length > 10000) break;
+    }
+  } catch(e) { /* invalid regex */ }
+
+  findIdx = -1;
+  updateFindCount();
+  if (findMatches.length > 0) findNext();
+}
+
+function findNext() {
+  if (findMatches.length === 0) return;
+  const cursorPos = window.editorView.state.selection.main.head;
+  findIdx = findMatches.findIndex(m => m.from >= cursorPos);
+  if (findIdx === -1) findIdx = 0;
+  goToMatch();
+}
+
+function findPrev() {
+  if (findMatches.length === 0) return;
+  const cursorPos = window.editorView.state.selection.main.head;
+  for (let i = findMatches.length - 1; i >= 0; i--) {
+    if (findMatches[i].from < cursorPos - 1) { findIdx = i; goToMatch(); return; }
+  }
+  findIdx = findMatches.length - 1;
+  goToMatch();
+}
+
+function goToMatch() {
+  const m = findMatches[findIdx];
+  if (!m) return;
+  window.editorView.dispatch({
+    selection: {anchor: m.from, head: m.to},
+    scrollIntoView: true
+  });
+  updateFindCount();
+}
+
+function replaceOne() {
+  if (findIdx < 0 || findIdx >= findMatches.length) return;
+  const m = findMatches[findIdx];
+  const replacement = document.getElementById('replace-input').value;
+  window.editorView.dispatch({
+    changes: {from: m.from, to: m.to, insert: replacement}
+  });
+  doFind();
+}
+
+function replaceAll() {
+  const replacement = document.getElementById('replace-input').value;
+  if (findMatches.length === 0) return;
+  const changes = findMatches.map(m => ({from: m.from, to: m.to, insert: replacement})).reverse();
+  window.editorView.dispatch({changes});
+  toast(`Replaced ${findMatches.length} occurrences`, 'info');
+  doFind();
+}
+
+function clearFindHighlights() { /* CodeMirror handles this natively */ }
+
+function updateFindCount() {
+  const el = document.getElementById('find-count');
+  if (findMatches.length === 0) el.textContent = 'No results';
+  else el.textContent = `${findIdx + 1} of ${findMatches.length}`;
+}
+
+// Find bar events
+document.getElementById('find-input').addEventListener('input', doFind);
+document.getElementById('find-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.shiftKey ? findPrev() : findNext(); }
+  if (e.key === 'Escape') toggleFind();
+});
+document.getElementById('replace-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') replaceOne();
+  if (e.key === 'Escape') toggleFind();
+});
+document.getElementById('find-next').onclick = findNext;
+document.getElementById('find-prev').onclick = findPrev;
+document.getElementById('find-close').onclick = () => { findOpen = false; document.getElementById('find-bar').classList.remove('open'); };
+document.getElementById('replace-one').onclick = replaceOne;
+document.getElementById('replace-all').onclick = replaceAll;
+
+// Toggles
+['find-regex', 'find-case', 'find-word'].forEach(id => {
+  document.getElementById(id).onclick = function() {
+    this.classList.toggle('active');
+    if (id === 'find-regex') findRegex = this.classList.contains('active');
+    if (id === 'find-case') findCaseSensitive = this.classList.contains('active');
+    if (id === 'find-word') findWholeWord = this.classList.contains('active');
+    doFind();
+  };
+});
+
+// ══════════════════════════════════════════════════
+// COMMAND PALETTE
+// ══════════════════════════════════════════════════
+const COMMANDS = [
+  {name: 'New File', shortcut: 'Ctrl+N', action: () => createTab()},
+  {name: 'Open File', shortcut: 'Ctrl+O', action: openFile},
+  {name: 'Save', shortcut: 'Ctrl+S', action: save},
+  {name: 'Save As', shortcut: 'Ctrl+Shift+S', action: saveAs},
+  {name: 'Close Tab', shortcut: 'Ctrl+W', action: () => closeTab(activeTabId)},
+  {name: 'Find', shortcut: 'Ctrl+F', action: () => toggleFind(false)},
+  {name: 'Find & Replace', shortcut: 'Ctrl+H', action: () => toggleFind(true)},
+  {name: 'Go to Line', shortcut: 'Ctrl+G', action: showGotoLine},
+  {name: 'Toggle Word Wrap', shortcut: '', action: toggleWordWrap},
+  {name: 'Toggle Minimap', shortcut: '', action: toggleMinimap},
+  {name: 'Zoom In', shortcut: 'Ctrl+=', action: zoomIn},
+  {name: 'Zoom Out', shortcut: 'Ctrl+-', action: zoomOut},
+  {name: 'Reset Zoom', shortcut: 'Ctrl+0', action: resetZoom},
+  {name: 'Select Language', shortcut: '', action: showLangSelector},
+  {name: 'Duplicate Line', shortcut: '', action: duplicateLine},
+  {name: 'Move Line Up', shortcut: 'Alt+↑', action: moveLineUp},
+  {name: 'Move Line Down', shortcut: 'Alt+↓', action: moveLineDown},
+  {name: 'Sort Lines (Ascending)', shortcut: '', action: () => sortLines(true)},
+  {name: 'Sort Lines (Descending)', shortcut: '', action: () => sortLines(false)},
+  {name: 'Remove Duplicate Lines', shortcut: '', action: removeDuplicateLines},
+  {name: 'Transform: Uppercase', shortcut: '', action: () => transformCase('upper')},
+  {name: 'Transform: Lowercase', shortcut: '', action: () => transformCase('lower')},
+  {name: 'Transform: Title Case', shortcut: '', action: () => transformCase('title')},
+  {name: 'Trim Trailing Whitespace', shortcut: '', action: trimTrailingWhitespace},
+  {name: 'Insert Date/Time', shortcut: '', action: insertDateTime},
+  {name: 'Toggle Comment', shortcut: 'Ctrl+/', action: toggleComment},
+  {name: 'Join Lines', shortcut: '', action: joinLines},
+  {name: 'Indent With Tabs', shortcut: '', action: () => setIndent('tab')},
+  {name: 'Indent With 2 Spaces', shortcut: '', action: () => setIndent(2)},
+  {name: 'Indent With 4 Spaces', shortcut: '', action: () => setIndent(4)},
+];
+
+let commandPaletteOpen = false;
+let selectedCommandIdx = 0;
+
+function showCommandPalette() {
+  commandPaletteOpen = true;
+  document.getElementById('command-palette-overlay').classList.add('open');
+  const input = document.getElementById('command-input');
+  input.value = '';
+  input.focus();
+  renderCommands('');
+}
+
+function hideCommandPalette() {
+  commandPaletteOpen = false;
+  document.getElementById('command-palette-overlay').classList.remove('open');
+  window.editorView.focus();
+}
+
+function renderCommands(filter) {
+  const results = document.getElementById('command-results');
+  const filtered = COMMANDS.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()));
+  selectedCommandIdx = 0;
+  results.innerHTML = filtered.map((c, i) => `
+    <div class="command-result ${i === 0 ? 'selected' : ''}" data-idx="${i}">
+      <span class="cmd-name">${c.name}</span>
+      <span class="cmd-shortcut">${c.shortcut}</span>
+    </div>
+  `).join('');
+
+  results.querySelectorAll('.command-result').forEach((el, i) => {
+    el.onclick = () => { filtered[i].action(); hideCommandPalette(); };
+    el.onmouseover = () => {
+      results.querySelectorAll('.command-result').forEach(e => e.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedCommandIdx = i;
+    };
+  });
+}
+
+document.getElementById('command-input').addEventListener('input', (e) => renderCommands(e.target.value));
+document.getElementById('command-input').addEventListener('keydown', (e) => {
+  const items = document.querySelectorAll('.command-result');
+  if (e.key === 'ArrowDown') { e.preventDefault(); selectedCommandIdx = Math.min(selectedCommandIdx + 1, items.length - 1); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); selectedCommandIdx = Math.max(selectedCommandIdx - 1, 0); }
+  items.forEach((el, i) => el.classList.toggle('selected', i === selectedCommandIdx));
+  items[selectedCommandIdx]?.scrollIntoView({block: 'nearest'});
+  if (e.key === 'Enter') { items[selectedCommandIdx]?.click(); }
+  if (e.key === 'Escape') hideCommandPalette();
+});
+document.getElementById('command-palette-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) hideCommandPalette();
+});
+
+// ══════════════════════════════════════════════════
+// GOTO LINE
+// ══════════════════════════════════════════════════
+function showGotoLine() {
+  document.getElementById('goto-line-overlay').classList.add('open');
+  const inp = document.getElementById('goto-line-input');
+  inp.value = '';
+  inp.focus();
+}
+function hideGotoLine() {
+  document.getElementById('goto-line-overlay').classList.remove('open');
+  window.editorView.focus();
+}
+document.getElementById('goto-line-input').addEventListener('keydown', e => {
+  if (e.key === 'Escape') hideGotoLine();
+  if (e.key === 'Enter') {
+    const val = e.target.value;
+    const [lineStr, colStr] = val.split(':');
+    const line = parseInt(lineStr) || 1;
+    const col = parseInt(colStr) || 1;
+    const doc = window.editorView.state.doc;
+    const clampedLine = Math.max(1, Math.min(line, doc.lines));
+    const lineInfo = doc.line(clampedLine);
+    const pos = Math.min(lineInfo.from + col - 1, lineInfo.to);
+    window.editorView.dispatch({
+      selection: {anchor: pos},
+      scrollIntoView: true,
+      effects: EditorView.scrollIntoView(pos, {y: 'center'})
+    });
+    hideGotoLine();
+  }
+});
+document.getElementById('goto-line-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) hideGotoLine();
+});
+
+// ══════════════════════════════════════════════════
+// LANGUAGE SELECTOR
+// ══════════════════════════════════════════════════
+function showLangSelector() {
+  document.getElementById('lang-selector').classList.add('open');
+  const inp = document.getElementById('lang-search-input');
+  inp.value = '';
+  inp.focus();
+  renderLangList('');
+}
+function hideLangSelector() {
+  document.getElementById('lang-selector').classList.remove('open');
+  window.editorView.focus();
+}
+function renderLangList(filter) {
+  const list = document.getElementById('lang-list');
+  const names = Object.keys(LANGUAGES).filter(n => n.toLowerCase().includes(filter.toLowerCase()));
+  list.innerHTML = names.map((n, i) => `<div class="lang-option ${i===0?'selected':''}" data-lang="${n}">${n}</div>`).join('');
+  list.querySelectorAll('.lang-option').forEach(el => {
+    el.onclick = () => { changeLanguage(el.dataset.lang); hideLangSelector(); };
+  });
+}
+document.getElementById('lang-search-input').addEventListener('input', e => renderLangList(e.target.value));
+document.getElementById('lang-search-input').addEventListener('keydown', e => {
+  if (e.key === 'Escape') hideLangSelector();
+  if (e.key === 'Enter') {
+    const sel = document.querySelector('.lang-option.selected') || document.querySelector('.lang-option');
+    if (sel) { changeLanguage(sel.dataset.lang); hideLangSelector(); }
+  }
+});
+document.getElementById('lang-selector').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) hideLangSelector();
+});
+
+function changeLanguage(langName) {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (tab) tab.language = langName;
+  const ext = getLanguageExtension(langName);
+  window.editorView.dispatch({
+    effects: languageCompartment.reconfigure(ext)
+  });
+  updateStatusBar();
+}
+
+// ══════════════════════════════════════════════════
+// EDITOR COMMANDS
+// ══════════════════════════════════════════════════
+function duplicateLine() {
+  const state = window.editorView.state;
+  const line = state.doc.lineAt(state.selection.main.head);
+  window.editorView.dispatch({
+    changes: {from: line.to, insert: '\n' + line.text}
+  });
+}
+
+function moveLineUp() {
+  const state = window.editorView.state;
+  const line = state.doc.lineAt(state.selection.main.head);
+  if (line.number <= 1) return;
+  const prev = state.doc.line(line.number - 1);
+  window.editorView.dispatch({
+    changes: [
+      {from: prev.from, to: line.to, insert: line.text + '\n' + prev.text}
+    ],
+    selection: {anchor: prev.from + line.text.length - (state.selection.main.head - line.from)}
+  });
+}
+
+function moveLineDown() {
+  const state = window.editorView.state;
+  const line = state.doc.lineAt(state.selection.main.head);
+  if (line.number >= state.doc.lines) return;
+  const next = state.doc.line(line.number + 1);
+  window.editorView.dispatch({
+    changes: [
+      {from: line.from, to: next.to, insert: next.text + '\n' + line.text}
+    ]
+  });
+}
+
+function sortLines(asc) {
+  const state = window.editorView.state;
+  const {from, to} = state.selection.main;
+  const startLine = state.doc.lineAt(from);
+  const endLine = state.doc.lineAt(to);
+  const lines = [];
+  for (let i = startLine.number; i <= endLine.number; i++) {
+    lines.push(state.doc.line(i).text);
+  }
+  lines.sort((a, b) => asc ? a.localeCompare(b) : b.localeCompare(a));
+  window.editorView.dispatch({
+    changes: {from: startLine.from, to: endLine.to, insert: lines.join('\n')}
+  });
+  toast(`Sorted ${lines.length} lines`, 'info');
+}
+
+function removeDuplicateLines() {
+  const doc = window.editorView.state.doc.toString();
+  const lines = doc.split('\n');
+  const unique = [...new Set(lines)];
+  const removed = lines.length - unique.length;
+  window.editorView.dispatch({
+    changes: {from: 0, to: window.editorView.state.doc.length, insert: unique.join('\n')}
+  });
+  toast(`Removed ${removed} duplicate lines`, 'info');
+}
+
+function transformCase(type) {
+  const state = window.editorView.state;
+  const {from, to} = state.selection.main;
+  if (from === to) return;
+  const text = state.sliceDoc(from, to);
+  let transformed;
+  if (type === 'upper') transformed = text.toUpperCase();
+  else if (type === 'lower') transformed = text.toLowerCase();
+  else transformed = text.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.substr(1).toLowerCase());
+  window.editorView.dispatch({changes: {from, to, insert: transformed}});
+}
+
+function trimTrailingWhitespace() {
+  const doc = window.editorView.state.doc;
+  const changes = [];
+  for (let i = 1; i <= doc.lines; i++) {
+    const line = doc.line(i);
+    const trimmed = line.text.replace(/\s+$/, '');
+    if (trimmed.length < line.text.length) {
+      changes.push({from: line.from + trimmed.length, to: line.to});
+    }
+  }
+  if (changes.length > 0) {
+    window.editorView.dispatch({changes});
+    toast(`Trimmed ${changes.length} lines`, 'info');
+  } else {
+    toast('No trailing whitespace found', 'info');
+  }
+}
+
+function insertDateTime() {
+  const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const pos = window.editorView.state.selection.main.head;
+  window.editorView.dispatch({changes: {from: pos, insert: now}});
+}
+
+function toggleComment() {
+  const state = window.editorView.state;
+  const line = state.doc.lineAt(state.selection.main.head);
+  const trimmed = line.text.trimStart();
+  if (trimmed.startsWith('// ')) {
+    const idx = line.text.indexOf('// ');
+    window.editorView.dispatch({changes: {from: line.from + idx, to: line.from + idx + 3}});
+  } else if (trimmed.startsWith('#')) {
+    const idx = line.text.indexOf('#');
+    const end = line.text[idx + 1] === ' ' ? idx + 2 : idx + 1;
+    window.editorView.dispatch({changes: {from: line.from + idx, to: line.from + end}});
+  } else {
+    const indent = line.text.length - trimmed.length;
+    window.editorView.dispatch({changes: {from: line.from + indent, insert: '// '}});
+  }
+}
+
+function joinLines() {
+  const state = window.editorView.state;
+  const {from, to} = state.selection.main;
+  const startLine = state.doc.lineAt(from);
+  const endLine = state.doc.lineAt(to);
+  if (startLine.number === endLine.number && endLine.number < state.doc.lines) {
+    const nextLine = state.doc.line(endLine.number + 1);
+    window.editorView.dispatch({
+      changes: {from: endLine.to, to: nextLine.from + (nextLine.text.length - nextLine.text.trimStart().length), insert: ' '}
+    });
+  }
+}
+
+function setIndent(type) {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (!tab) return;
+  if (type === 'tab') {
+    document.getElementById('status-indent').textContent = 'Tabs';
+  } else {
+    document.getElementById('status-indent').textContent = `Spaces: ${type}`;
+  }
+  toast(`Indent set to ${type === 'tab' ? 'Tabs' : type + ' spaces'}`, 'info');
+}
+
+// ══════════════════════════════════════════════════
+// VIEW COMMANDS
+// ══════════════════════════════════════════════════
+function toggleWordWrap() {
+  wordWrapEnabled = !wordWrapEnabled;
+  window.editorView.dispatch({
+    effects: wordWrapCompartment.reconfigure(wordWrapEnabled ? EditorView.lineWrapping : [])
+  });
+  toast(`Word wrap ${wordWrapEnabled ? 'enabled' : 'disabled'}`, 'info');
+}
+
+let minimapVisible = false;
+function toggleMinimap() {
+  minimapVisible = !minimapVisible;
+  document.getElementById('minimap').classList.toggle('visible', minimapVisible);
+  if (minimapVisible) updateMinimap();
+  toast(`Minimap ${minimapVisible ? 'shown' : 'hidden'}`, 'info');
+}
+
+function updateMinimap() {
+  if (!minimapVisible) return;
+  const canvas = document.getElementById('minimap-canvas');
+  const ctx = canvas.getContext('2d');
+  const container = document.getElementById('minimap');
+  canvas.width = container.offsetWidth * 2;
+  canvas.height = container.offsetHeight * 2;
+  ctx.scale(2, 2);
+
+  const doc = window.editorView.state.doc;
+  const totalLines = doc.lines;
+  const h = container.offsetHeight;
+  const lineHeight = Math.max(1, Math.min(2, h / totalLines));
+
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg-secondary');
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let i = 1; i <= Math.min(totalLines, 5000); i++) {
+    const line = doc.line(i);
+    const y = (i - 1) * lineHeight;
+    const len = Math.min(line.text.length, 80);
+    if (len > 0) {
+      ctx.fillStyle = 'rgba(192, 202, 245, 0.15)';
+      ctx.fillRect(4, y, len * 0.8, Math.max(lineHeight - 0.5, 0.5));
+    }
+  }
+
+  // Viewport indicator
+  const scrollInfo = window.editorView.scrollDOM;
+  const scrollTop = scrollInfo.scrollTop;
+  const scrollHeight = scrollInfo.scrollHeight;
+  const clientHeight = scrollInfo.clientHeight;
+  const vpTop = (scrollTop / scrollHeight) * h;
+  const vpHeight = Math.max(20, (clientHeight / scrollHeight) * h);
+  const vpEl = document.getElementById('minimap-viewport');
+  vpEl.style.top = vpTop + 'px';
+  vpEl.style.height = vpHeight + 'px';
+}
+
+// Update minimap on scroll/change
+setInterval(updateMinimap, 500);
+
+// Minimap click to scroll
+document.getElementById('minimap').addEventListener('click', (e) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const ratio = (e.clientY - rect.top) / rect.height;
+  const scrollHeight = window.editorView.scrollDOM.scrollHeight;
+  window.editorView.scrollDOM.scrollTop = ratio * scrollHeight;
+});
+
+// ══════════════════════════════════════════════════
+// ZOOM
+// ══════════════════════════════════════════════════
+function zoomIn() { fontSize = Math.min(32, fontSize + 1); applyFontSize(); }
+function zoomOut() { fontSize = Math.max(8, fontSize - 1); applyFontSize(); }
+function resetZoom() { fontSize = 14; applyFontSize(); }
+function applyFontSize() {
+  document.querySelector('.cm-editor').style.fontSize = fontSize + 'px';
+  toast(`Font size: ${fontSize}px`, 'info');
+}
+
+// ══════════════════════════════════════════════════
+// STATUS BAR
+// ══════════════════════════════════════════════════
+function updateStatusBar() {
+  const state = window.editorView.state;
+  const tab = tabs.find(t => t.id === activeTabId);
+  const main = state.selection.main;
+  const line = state.doc.lineAt(main.head);
+  const col = main.head - line.from + 1;
+
+  document.getElementById('status-cursor').textContent = `Ln ${line.number}, Col ${col}`;
+  document.getElementById('status-file').textContent = tab ? tab.filename : '';
+  document.getElementById('status-lang').textContent = tab ? tab.language : 'Plain Text';
+  document.getElementById('status-modified').textContent = tab?.modified ? '●' : '';
+  document.getElementById('status-modified').style.color = 'var(--orange)';
+
+  // Selection info
+  const selLen = Math.abs(main.to - main.from);
+  const selEl = document.getElementById('status-selection');
+  if (selLen > 0) {
+    const selLines = state.doc.lineAt(main.to).number - state.doc.lineAt(main.from).number + 1;
+    selEl.textContent = `(${selLen} selected, ${selLines} lines)`;
+  } else if (state.selection.ranges.length > 1) {
+    selEl.textContent = `${state.selection.ranges.length} cursors`;
+  } else {
+    selEl.textContent = '';
+  }
+}
+
+// Language selector from status bar
+document.getElementById('status-lang').onclick = showLangSelector;
+
+// ══════════════════════════════════════════════════
+// MENU BAR
+// ══════════════════════════════════════════════════
+let openMenu = null;
+document.querySelectorAll('.menu-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    if (e.target.closest('.menu-dropdown-item')) return;
+    if (item.classList.contains('open')) {
+      item.classList.remove('open');
+      openMenu = null;
+    } else {
+      document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('open'));
+      item.classList.add('open');
+      openMenu = item;
+    }
+  });
+  item.addEventListener('mouseenter', () => {
+    if (openMenu && openMenu !== item) {
+      openMenu.classList.remove('open');
+      item.classList.add('open');
+      openMenu = item;
+    }
+  });
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.menu-item')) {
+    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('open'));
+    openMenu = null;
+  }
+});
+
+// Menu actions
+document.querySelectorAll('.menu-dropdown-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const action = item.dataset.action;
+    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('open'));
+    openMenu = null;
+    const actions = {
+      newFile: () => createTab(),
+      openFile,
+      save,
+      saveAs,
+      closeTab: () => closeTab(activeTabId),
+      undo: () => window.editorView.dispatch({effects: []}), // handled by CM
+      redo: () => {},
+      find: () => toggleFind(false),
+      replace: () => toggleFind(true),
+      gotoLine: showGotoLine,
+      toggleMinimap,
+      toggleWordWrap,
+      zoomIn,
+      zoomOut,
+      resetZoom,
+      commandPalette: showCommandPalette,
+    };
+    if (actions[action]) actions[action]();
+  });
+});
+
+// Add tab button
+document.getElementById('add-tab').onclick = () => createTab();
+
+// ══════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ══════════════════════════════════════════════════
+document.addEventListener('keydown', (e) => {
+  const ctrl = e.ctrlKey || e.metaKey;
+  const shift = e.shiftKey;
+
+  if (ctrl && shift && e.key === 'P') { e.preventDefault(); showCommandPalette(); return; }
+  if (ctrl && e.key === 'n') { e.preventDefault(); createTab(); return; }
+  if (ctrl && e.key === 'o') { e.preventDefault(); openFile(); return; }
+  if (ctrl && e.key === 's' && !shift) { e.preventDefault(); save(); return; }
+  if (ctrl && shift && e.key === 'S') { e.preventDefault(); saveAs(); return; }
+  if (ctrl && e.key === 'w') { e.preventDefault(); closeTab(activeTabId); return; }
+  if (ctrl && e.key === 'f' && !shift) { e.preventDefault(); toggleFind(false); return; }
+  if (ctrl && e.key === 'h') { e.preventDefault(); toggleFind(true); return; }
+  if (ctrl && e.key === 'g') { e.preventDefault(); showGotoLine(); return; }
+  if (ctrl && e.key === '=') { e.preventDefault(); zoomIn(); return; }
+  if (ctrl && e.key === '-') { e.preventDefault(); zoomOut(); return; }
+  if (ctrl && e.key === '0') { e.preventDefault(); resetZoom(); return; }
+  if (ctrl && e.key === '/') { e.preventDefault(); toggleComment(); return; }
+
+  // Tab switching: Ctrl+1-9
+  if (ctrl && e.key >= '1' && e.key <= '9') {
+    e.preventDefault();
+    const idx = parseInt(e.key) - 1;
+    if (tabs[idx]) switchTab(tabs[idx].id);
+    return;
+  }
+
+  // Alt+Up/Down for move lines
+  if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); moveLineUp(); return; }
+  if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); moveLineDown(); return; }
+
+  if (e.key === 'Escape') {
+    if (commandPaletteOpen) hideCommandPalette();
+  }
+});
+
+// ══════════════════════════════════════════════════
+// TOAST NOTIFICATIONS
+// ══════════════════════════════════════════════════
+function toast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ══════════════════════════════════════════════════
+// PLUGIN API (for future extensions)
+// ══════════════════════════════════════════════════
+window.CamPad = {
+  // Core API
+  version: '1.0.0',
+
+  // Tab management
+  createTab,
+  switchTab,
+  closeTab,
+  getTabs: () => [...tabs],
+  getActiveTab: () => tabs.find(t => t.id === activeTabId),
+
+  // Editor access
+  getEditor: () => window.editorView,
+  getContent: () => window.editorView.state.doc.toString(),
+  setContent: (text) => window.editorView.dispatch({
+    changes: {from: 0, to: window.editorView.state.doc.length, insert: text}
+  }),
+  insertAt: (pos, text) => window.editorView.dispatch({changes: {from: pos, insert: text}}),
+  getSelection: () => {
+    const s = window.editorView.state.selection.main;
+    return window.editorView.state.sliceDoc(s.from, s.to);
+  },
+
+  // Commands
+  registerCommand: (name, shortcut, action) => {
+    COMMANDS.push({name, shortcut, action});
+  },
+
+  // Language support
+  registerLanguage: (name, ext, langFn) => {
+    LANGUAGES[name] = {ext, lang: langFn};
+  },
+
+  // UI
+  toast,
+  showCommandPalette,
+
+  // Events (simple pub/sub)
+  _listeners: {},
+  on: (event, fn) => {
+    if (!window.CamPad._listeners[event]) window.CamPad._listeners[event] = [];
+    window.CamPad._listeners[event].push(fn);
+  },
+  emit: (event, data) => {
+    (window.CamPad._listeners[event] || []).forEach(fn => fn(data));
+  },
+};
+
+// ══════════════════════════════════════════════════
+// FEATURE 1-5: RIGHT PANEL SYSTEM
+// ══════════════════════════════════════════════════
+
+// Panel tab switching
+document.querySelectorAll('.panel-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const panelId = tab.dataset.panel;
+    ['inspect','hex','strings','encoding','scratch'].forEach(p => {
+      const el = document.getElementById('panel-' + p);
+      if (el) el.style.display = p === panelId ? (p === 'scratch' ? 'flex' : 'block') : 'none';
+    });
+    document.getElementById('panel-title').textContent = tab.textContent;
+    if (panelId === 'inspect') runInspector();
+    if (panelId === 'hex') renderHexView();
+    if (panelId === 'strings') {} // manual scan
+    if (panelId === 'scratch') loadScratchPad();
+  });
+});
+
+function toggleRightPanel(tabName) {
+  const panel = document.getElementById('right-panel');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen && document.querySelector(`.panel-tab[data-panel="${tabName}"]`)?.classList.contains('active')) {
+    panel.classList.remove('open');
+  } else {
+    panel.classList.add('open');
+    document.querySelector(`.panel-tab[data-panel="${tabName}"]`)?.click();
+  }
+}
+
+document.getElementById('close-right-panel').onclick = () => {
+  document.getElementById('right-panel').classList.remove('open');
+};
+
+// ══════════════════════════════════════════════════
+// FEATURE 1: FILE INSPECTOR + MAGIC BYTES + ENTROPY
+// ══════════════════════════════════════════════════
+const MAGIC_SIGNATURES = {
+  'PNG':  {bytes: [0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A], exts: ['png']},
+  'JPEG': {bytes: [0xFF,0xD8,0xFF], exts: ['jpg','jpeg','jpe']},
+  'GIF87a': {bytes: [0x47,0x49,0x46,0x38,0x37,0x61], exts: ['gif']},
+  'GIF89a': {bytes: [0x47,0x49,0x46,0x38,0x39,0x61], exts: ['gif']},
+  'PDF':  {bytes: [0x25,0x50,0x44,0x46,0x2D], exts: ['pdf']},
+  'ZIP':  {bytes: [0x50,0x4B,0x03,0x04], exts: ['zip','xlsx','docx','pptx','jar','apk','odt']},
+  'GZIP': {bytes: [0x1F,0x8B], exts: ['gz','tgz']},
+  'RAR':  {bytes: [0x52,0x61,0x72,0x21,0x1A,0x07], exts: ['rar']},
+  '7Z':   {bytes: [0x37,0x7A,0xBC,0xAF,0x27,0x1C], exts: ['7z']},
+  'ELF':  {bytes: [0x7F,0x45,0x4C,0x46], exts: ['elf','so','o']},
+  'PE/EXE': {bytes: [0x4D,0x5A], exts: ['exe','dll','sys','drv','ocx']},
+  'Mach-O': {bytes: [0xCF,0xFA,0xED,0xFE], exts: ['dylib','bundle']},
+  'BMP':  {bytes: [0x42,0x4D], exts: ['bmp']},
+  'WEBP': {bytes: [0x52,0x49,0x46,0x46], exts: ['webp','avi','wav']},
+  'MP3 (ID3)': {bytes: [0x49,0x44,0x33], exts: ['mp3']},
+  'MP4/M4A': {bytes: [0x00,0x00,0x00], exts: ['mp4','m4a','m4v','mov']}, // ftyp at offset 4
+  'WASM': {bytes: [0x00,0x61,0x73,0x6D], exts: ['wasm']},
+  'SQLite': {bytes: [0x53,0x51,0x4C,0x69,0x74,0x65], exts: ['sqlite','db','sqlite3']},
+  'TAR':  {bytes: [0x75,0x73,0x74,0x61,0x72], exts: ['tar'], offset: 257},
+  'ICO':  {bytes: [0x00,0x00,0x01,0x00], exts: ['ico']},
+  'SVG (text)': {bytes: null, textMatch: '<svg', exts: ['svg']},
+  'XML':  {bytes: null, textMatch: '<?xml', exts: ['xml','xsl','xsd']},
+  'HTML': {bytes: null, textMatch: '<!doctype html', exts: ['html','htm']},
+  'HTML2': {bytes: null, textMatch: '<html', exts: ['html','htm']},
+  'JSON': {bytes: null, textMatch: null, exts: ['json']}, // detected by parsing
+};
+
+function detectMagicBytes(content) {
+  // Work with raw bytes if binary, or char codes if text
+  const bytes = typeof content === 'string'
+    ? Array.from(content.slice(0, 512)).map(c => c.charCodeAt(0))
+    : Array.from(new Uint8Array(content).slice(0, 512));
+
+  const textStart = typeof content === 'string'
+    ? content.slice(0, 512).toLowerCase().trim()
+    : new TextDecoder('utf-8', {fatal: false}).decode(new Uint8Array(content).slice(0, 512)).toLowerCase().trim();
+
+  const detected = [];
+  for (const [name, sig] of Object.entries(MAGIC_SIGNATURES)) {
+    if (sig.bytes) {
+      const offset = sig.offset || 0;
+      const match = sig.bytes.every((b, i) => bytes[offset + i] === b);
+      if (match) detected.push(name);
+    }
+    if (sig.textMatch && textStart.includes(sig.textMatch.toLowerCase())) {
+      detected.push(name);
+    }
+  }
+
+  // Special: check for JSON
+  if (textStart.startsWith('{') || textStart.startsWith('[')) {
+    try { JSON.parse(typeof content === 'string' ? content : new TextDecoder().decode(content)); detected.push('JSON'); } catch {}
+  }
+
+  return detected;
+}
+
+function calcEntropy(data) {
+  const freq = {};
+  const len = data.length;
+  if (len === 0) return 0;
+  for (let i = 0; i < len; i++) {
+    const c = typeof data === 'string' ? data.charCodeAt(i) : data[i];
+    freq[c] = (freq[c] || 0) + 1;
+  }
+  let entropy = 0;
+  for (const f of Object.values(freq)) {
+    const p = f / len;
+    if (p > 0) entropy -= p * Math.log2(p);
+  }
+  return entropy;
+}
+
+function detectBOM(bytes) {
+  if (bytes[0]===0xEF && bytes[1]===0xBB && bytes[2]===0xBF) return 'UTF-8 BOM';
+  if (bytes[0]===0xFF && bytes[1]===0xFE) return 'UTF-16 LE BOM';
+  if (bytes[0]===0xFE && bytes[1]===0xFF) return 'UTF-16 BE BOM';
+  if (bytes[0]===0x00 && bytes[1]===0x00 && bytes[2]===0xFE && bytes[3]===0xFF) return 'UTF-32 BE BOM';
+  return 'None';
+}
+
+function runInspector() {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (!tab) return;
+  const content = window.editorView.state.doc.toString();
+  const bytes = Array.from(content).map(c => c.charCodeAt(0));
+  const ext = tab.filename.includes('.') ? tab.filename.split('.').pop().toLowerCase() : '';
+
+  // Basic stats
+  document.getElementById('pi-name').textContent = tab.filename;
+  const sizeBytes = new Blob([content]).size;
+  document.getElementById('pi-size').textContent = sizeBytes < 1024 ? `${sizeBytes} B` : sizeBytes < 1048576 ? `${(sizeBytes/1024).toFixed(1)} KB` : `${(sizeBytes/1048576).toFixed(2)} MB`;
+  const doc = window.editorView.state.doc;
+  document.getElementById('pi-lines').textContent = doc.lines.toLocaleString();
+  document.getElementById('pi-chars').textContent = content.length.toLocaleString();
+  document.getElementById('pi-words').textContent = content.split(/\s+/).filter(w => w).length.toLocaleString();
+
+  // Magic bytes
+  const magicResults = detectMagicBytes(content);
+  document.getElementById('pi-ext').textContent = ext ? `.${ext}` : '(no extension)';
+  document.getElementById('pi-magic').textContent = magicResults.length > 0 ? magicResults.join(', ') : 'Plain text / unknown';
+
+  const extExpected = Object.entries(MAGIC_SIGNATURES).filter(([,v]) => v.exts.includes(ext)).map(([k]) => k);
+  const matchEl = document.getElementById('pi-match');
+  if (!ext || magicResults.length === 0) {
+    matchEl.textContent = '—';
+    matchEl.className = 'value';
+  } else if (magicResults.some(m => extExpected.includes(m))) {
+    matchEl.textContent = '✓ Match';
+    matchEl.className = 'value safe';
+  } else if (extExpected.length > 0) {
+    matchEl.textContent = '⚠ MISMATCH — extension lies!';
+    matchEl.className = 'value danger';
+  } else {
+    matchEl.textContent = 'Unverified';
+    matchEl.className = 'value warn';
+  }
+
+  // First 16 bytes hex
+  document.getElementById('pi-bytes').textContent = bytes.slice(0, 16).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+  // Entropy
+  const entropy = calcEntropy(content);
+  document.getElementById('pi-entropy').textContent = entropy.toFixed(4) + ' bits/char';
+  const bar = document.getElementById('pi-entropy-bar');
+  const pct = (entropy / 8) * 100;
+  bar.style.width = pct + '%';
+
+  const assessEl = document.getElementById('pi-entropy-assess');
+  if (entropy > 6.5) {
+    assessEl.textContent = '⚠ Very high — likely encrypted/compressed/obfuscated';
+    assessEl.className = 'value danger';
+    bar.style.background = 'var(--red)';
+  } else if (entropy > 5.5) {
+    assessEl.textContent = 'High — possibly encoded or minified';
+    assessEl.className = 'value warn';
+    bar.style.background = 'var(--orange)';
+  } else if (entropy > 3.5) {
+    assessEl.textContent = 'Normal for source code / text';
+    assessEl.className = 'value safe';
+    bar.style.background = 'var(--green)';
+  } else {
+    assessEl.textContent = 'Low — repetitive content';
+    assessEl.className = 'value';
+    bar.style.background = 'var(--accent)';
+  }
+
+  // Encoding detection
+  const bom = detectBOM(bytes);
+  document.getElementById('pi-bom').textContent = bom;
+  const nullCount = bytes.filter(b => b === 0).length;
+  document.getElementById('pi-nulls').textContent = nullCount > 0 ? `${nullCount} found ⚠` : '0';
+  document.getElementById('pi-nulls').className = nullCount > 0 ? 'value warn' : 'value safe';
+  const nonAscii = bytes.filter(b => b > 127).length;
+  document.getElementById('pi-nonascii').textContent = `${nonAscii} (${(nonAscii/Math.max(1,bytes.length)*100).toFixed(1)}%)`;
+  document.getElementById('pi-encoding').textContent = nullCount > bytes.length * 0.01 ? 'Likely binary/UTF-16' : nonAscii > 0 ? 'UTF-8 (multi-byte chars)' : 'ASCII';
+
+  // High entropy blocks
+  const blockSize = 256;
+  let highEntBlocks = 0;
+  for (let i = 0; i < content.length; i += blockSize) {
+    const block = content.slice(i, i + blockSize);
+    if (calcEntropy(block) > 6.0) highEntBlocks++;
+  }
+  document.getElementById('pi-highent').textContent = highEntBlocks > 0 ? `${highEntBlocks} blocks ⚠` : '0';
+  document.getElementById('pi-highent').className = highEntBlocks > 0 ? 'value warn' : 'value safe';
+
+  // Summary
+  const summaries = [];
+  if (matchEl.className.includes('danger')) summaries.push('🚨 File extension does NOT match actual content type!');
+  if (entropy > 6.5) summaries.push('🔐 Very high entropy suggests encryption, compression, or obfuscation.');
+  if (nullCount > 10) summaries.push('⚠️ Contains null bytes — may be binary disguised as text.');
+  if (highEntBlocks > 3) summaries.push('📊 Multiple high-entropy blocks detected — possible embedded payloads.');
+  if (summaries.length === 0) summaries.push('✅ File appears to be normal text/code content.');
+  document.getElementById('pi-summary').innerHTML = summaries.map(s => `<div style="margin-bottom:4px">${s}</div>`).join('');
+}
+
+// ══════════════════════════════════════════════════
+// FEATURE 2: HEX VIEW
+// ══════════════════════════════════════════════════
+function renderHexView() {
+  const content = window.editorView.state.doc.toString();
+  const bytes = Array.from(content.slice(0, 4096)).map(c => c.charCodeAt(0));
+  const container = document.getElementById('hex-content');
+  let html = '';
+
+  for (let offset = 0; offset < bytes.length; offset += 16) {
+    const row = bytes.slice(offset, offset + 16);
+    const offsetStr = `<span class="hex-offset">${offset.toString(16).padStart(8, '0')}</span>  `;
+    const hexPart = row.map(b => {
+      const cls = b === 0 ? 'null' : (b >= 32 && b <= 126) ? 'printable' : (b > 127) ? 'high' : '';
+      return `<span class="hex-byte ${cls}">${b.toString(16).padStart(2, '0')}</span>`;
+    }).join(' ');
+    const padding = '   '.repeat(16 - row.length);
+    const asciiPart = row.map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '·').join('');
+    html += offsetStr + hexPart + padding + `<span class="hex-ascii">${asciiPart}</span>\n`;
+  }
+
+  container.innerHTML = html || '<span style="color:var(--text-muted)">No content</span>';
+}
+
+document.getElementById('hex-copy-btn').onclick = () => {
+  const text = document.getElementById('hex-content').textContent;
+  navigator.clipboard.writeText(text);
+  toast('Hex dump copied', 'success');
+};
+
+document.getElementById('hex-export-btn').onclick = () => {
+  const content = window.editorView.state.doc.toString();
+  const tab = tabs.find(t => t.id === activeTabId);
+  const bytes = Array.from(content.slice(0, 2048)).map(c => c.charCodeAt(0));
+  const entropy = calcEntropy(content);
+  const magicResults = detectMagicBytes(content);
+
+  const prompt = `I have a file "${tab?.filename || 'unknown'}" that I need help analyzing.
+
+File info:
+- Size: ${new Blob([content]).size} bytes
+- Detected type by magic bytes: ${magicResults.join(', ') || 'unknown'}
+- Shannon entropy: ${entropy.toFixed(4)} bits/char
+- Encoding: ${bytes.filter(b => b === 0).length > 0 ? 'Contains null bytes' : 'Text-based'}
+
+First 512 bytes (hex):
+${bytes.slice(0, 512).map((b, i) => b.toString(16).padStart(2, '0') + ((i + 1) % 32 === 0 ? '\n' : ' ')).join('')}
+
+First 512 chars (text):
+${content.slice(0, 512)}
+
+Please help me understand:
+1. What this file actually is
+2. Any suspicious patterns or embedded content
+3. Whether the file appears to be what its extension claims`;
+
+  createTab('llm-analysis-prompt.md', prompt);
+  toast('LLM prompt created in new tab — copy and paste to your AI', 'info');
+};
+
+// ══════════════════════════════════════════════════
+// FEATURE 3: STRING SCANNER / SUSPICIOUS PATTERN DETECTOR
+// ══════════════════════════════════════════════════
+const SCAN_PATTERNS = [
+  // Network & data exfiltration
+  {name: 'URL (http/https)', regex: /https?:\/\/[^\s"'<>]+/g, severity: 'info', category: 'network'},
+  {name: 'IP Address', regex: /\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g, severity: 'medium', category: 'network'},
+  {name: 'Email Address', regex: /[\w.-]+@[\w.-]+\.\w{2,}/g, severity: 'info', category: 'pii'},
+  {name: 'Domain (bare)', regex: /\b[\w-]+\.(com|net|org|io|dev|ru|cn|xyz|tk|top|info|cc)\b/gi, severity: 'low', category: 'network'},
+
+  // Secrets & credentials
+  {name: 'API Key pattern', regex: /(?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|secret[_-]?key)\s*[:=]\s*["']?[A-Za-z0-9_\-]{16,}["']?/gi, severity: 'high', category: 'secret'},
+  {name: 'AWS Key', regex: /(?:AKIA|ASIA)[A-Z0-9]{16}/g, severity: 'high', category: 'secret'},
+  {name: 'Private Key Block', regex: /-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----/g, severity: 'high', category: 'secret'},
+  {name: 'Password field', regex: /(?:password|passwd|pwd)\s*[:=]\s*["'][^"']{1,}/gi, severity: 'high', category: 'secret'},
+  {name: 'JWT Token', regex: /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, severity: 'high', category: 'secret'},
+  {name: 'GitHub Token', regex: /gh[ps]_[A-Za-z0-9_]{36}/g, severity: 'high', category: 'secret'},
+
+  // Dangerous code patterns
+  {name: 'eval() call', regex: /\beval\s*\(/g, severity: 'high', category: 'code'},
+  {name: 'Function constructor', regex: /new\s+Function\s*\(/g, severity: 'high', category: 'code'},
+  {name: 'document.write', regex: /document\.write\s*\(/g, severity: 'medium', category: 'code'},
+  {name: 'innerHTML assignment', regex: /\.innerHTML\s*=/g, severity: 'low', category: 'code'},
+  {name: 'exec / spawn / shell', regex: /(?:child_process|exec|spawn|execSync|shell)\s*[\(.]/g, severity: 'high', category: 'code'},
+  {name: 'fetch/XMLHttpRequest', regex: /(?:fetch|XMLHttpRequest|\.ajax)\s*\(/g, severity: 'medium', category: 'code'},
+  {name: 'WebSocket', regex: /new\s+WebSocket\s*\(/g, severity: 'medium', category: 'code'},
+  {name: 'postMessage', regex: /\.postMessage\s*\(/g, severity: 'medium', category: 'code'},
+  {name: 'atob/btoa (base64)', regex: /\b(?:atob|btoa)\s*\(/g, severity: 'low', category: 'code'},
+  {name: 'crypto/hash calls', regex: /(?:crypto|CryptoJS|createHash|createCipher)\b/g, severity: 'low', category: 'code'},
+  {name: 'require() dynamic', regex: /require\s*\(\s*(?!["'])/g, severity: 'medium', category: 'code'},
+
+  // Obfuscation indicators
+  {name: 'Long hex string (>40 chars)', regex: /(?:0x)?[0-9a-fA-F]{40,}/g, severity: 'medium', category: 'obfuscation'},
+  {name: 'Long base64 blob (>100 chars)', regex: /[A-Za-z0-9+/]{100,}={0,2}/g, severity: 'medium', category: 'obfuscation'},
+  {name: 'String charCode obfuscation', regex: /String\.fromCharCode\s*\(/g, severity: 'high', category: 'obfuscation'},
+  {name: 'Unicode escape sequences', regex: /\\u[0-9a-fA-F]{4}/g, severity: 'low', category: 'obfuscation'},
+  {name: 'Hex escape sequences', regex: /\\x[0-9a-fA-F]{2}/g, severity: 'low', category: 'obfuscation'},
+
+  // File system access
+  {name: 'File path pattern', regex: /(?:\/etc\/(?:passwd|shadow|hosts)|C:\\\\Windows|\/proc\/|\.\.\/)/gi, severity: 'high', category: 'filesystem'},
+  {name: 'fs.read/write', regex: /fs\.(?:read|write|unlink|mkdir|rmdir|chmod)/g, severity: 'medium', category: 'filesystem'},
+  {name: 'Environment variable access', regex: /process\.env\.[A-Z_]+/g, severity: 'low', category: 'code'},
+
+  // SVG/HTML specific
+  {name: 'Script tag in SVG/markup', regex: /<script[\s>]/gi, severity: 'high', category: 'injection'},
+  {name: 'Event handler in markup', regex: /\bon\w+\s*=\s*["']/gi, severity: 'high', category: 'injection'},
+  {name: 'iframe embed', regex: /<iframe[\s>]/gi, severity: 'high', category: 'injection'},
+  {name: 'data: URI', regex: /data:[a-z]+\/[a-z]+;base64,/gi, severity: 'medium', category: 'injection'},
+  {name: 'javascript: URI', regex: /javascript\s*:/gi, severity: 'high', category: 'injection'},
+];
+
+function runScan() {
+  const content = window.editorView.state.doc.toString();
+  const doc = window.editorView.state.doc;
+  const findings = [];
+
+  for (const pattern of SCAN_PATTERNS) {
+    const regex = new RegExp(pattern.regex.source, pattern.regex.flags);
+    let match;
+    let count = 0;
+    while ((match = regex.exec(content)) !== null && count < 50) {
+      const pos = match.index;
+      const lineInfo = doc.lineAt(pos);
+      findings.push({
+        name: pattern.name,
+        severity: pattern.severity,
+        category: pattern.category,
+        value: match[0].slice(0, 120),
+        line: lineInfo.number,
+        col: pos - lineInfo.from + 1,
+        pos
+      });
+      count++;
+    }
+  }
+
+  findings.sort((a, b) => {
+    const sev = {high: 0, medium: 1, low: 2, info: 3};
+    return sev[a.severity] - sev[b.severity];
+  });
+
+  // Summary
+  const counts = {high: 0, medium: 0, low: 0, info: 0};
+  findings.forEach(f => counts[f.severity]++);
+  const summaryEl = document.getElementById('scan-summary');
+  summaryEl.innerHTML = `
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
+      ${counts.high > 0 ? `<span class="panel-badge red">🔴 ${counts.high} High</span>` : ''}
+      ${counts.medium > 0 ? `<span class="panel-badge orange">🟠 ${counts.medium} Medium</span>` : ''}
+      ${counts.low > 0 ? `<span class="panel-badge blue">🔵 ${counts.low} Low</span>` : ''}
+      ${counts.info > 0 ? `<span class="panel-badge purple">ℹ️ ${counts.info} Info</span>` : ''}
+      ${findings.length === 0 ? `<span class="panel-badge green">✅ Clean — nothing found</span>` : ''}
+    </div>
+    <div style="font-size:10px; color:var(--text-muted);">${findings.length} findings in ${doc.lines} lines</div>
+  `;
+
+  // Render findings
+  const resultsEl = document.getElementById('scan-results');
+  resultsEl.innerHTML = findings.map(f => `
+    <div class="finding-item severity-${f.severity}" data-pos="${f.pos}">
+      <div class="finding-title">${f.name}</div>
+      <div class="finding-detail">${escapeHtml(f.value)}</div>
+      <div class="finding-line">Line ${f.line}:${f.col} · ${f.category}</div>
+    </div>
+  `).join('');
+
+  // Click to navigate
+  resultsEl.querySelectorAll('.finding-item').forEach(el => {
+    el.onclick = () => {
+      const pos = parseInt(el.dataset.pos);
+      window.editorView.dispatch({
+        selection: {anchor: pos},
+        scrollIntoView: true,
+        effects: EditorView.scrollIntoView(pos, {y: 'center'})
+      });
+      window.editorView.focus();
+    };
+  });
+
+  // Store for export
+  window._lastScanFindings = findings;
+  toast(`Scan complete: ${findings.length} findings`, findings.some(f => f.severity === 'high') ? 'error' : 'info');
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+document.getElementById('scan-all-btn').onclick = runScan;
+document.getElementById('scan-export-btn').onclick = () => {
+  const findings = window._lastScanFindings || [];
+  if (findings.length === 0) { toast('Run a scan first', 'info'); return; }
+  const tab = tabs.find(t => t.id === activeTabId);
+  let report = `# Security Scan Report — ${tab?.filename || 'unknown'}\n`;
+  report += `Date: ${new Date().toISOString()}\n`;
+  report += `Findings: ${findings.length}\n\n`;
+  const grouped = {};
+  findings.forEach(f => { (grouped[f.severity] = grouped[f.severity] || []).push(f); });
+  for (const sev of ['high','medium','low','info']) {
+    if (!grouped[sev]) continue;
+    report += `## ${sev.toUpperCase()} (${grouped[sev].length})\n`;
+    grouped[sev].forEach(f => {
+      report += `- [L${f.line}:${f.col}] ${f.name}: ${f.value}\n`;
+    });
+    report += '\n';
+  }
+  navigator.clipboard.writeText(report);
+  toast('Scan report copied to clipboard', 'success');
+};
+
+// ══════════════════════════════════════════════════
+// FEATURE 4: ENCODING CONVERTER
+// ══════════════════════════════════════════════════
+function getEncodeInput() {
+  const inp = document.getElementById('encode-input');
+  if (inp.value) return inp.value;
+  // Fallback to editor selection
+  const sel = window.editorView.state.selection.main;
+  return window.editorView.state.sliceDoc(sel.from, sel.to);
+}
+
+// Decode buttons
+document.querySelectorAll('[data-decode]').forEach(btn => {
+  btn.onclick = () => {
+    const input = getEncodeInput();
+    if (!input) { toast('No input — paste text or select in editor', 'info'); return; }
+    let result = '';
+    try {
+      switch(btn.dataset.decode) {
+        case 'base64': result = atob(input.trim()); break;
+        case 'url': result = decodeURIComponent(input); break;
+        case 'html': {
+          const el = document.createElement('textarea');
+          el.innerHTML = input;
+          result = el.value;
+          break;
+        }
+        case 'hex': result = input.replace(/[^0-9a-fA-F]/g, '').replace(/.{2}/g, h => String.fromCharCode(parseInt(h, 16))); break;
+        case 'unicode': result = input.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))); break;
+        case 'rot13': result = input.replace(/[a-zA-Z]/g, c => String.fromCharCode(c.charCodeAt(0) + (c.toLowerCase() < 'n' ? 13 : -13))); break;
+        case 'reverse': result = [...input].reverse().join(''); break;
+      }
+    } catch(e) { result = `Error: ${e.message}`; }
+    document.getElementById('encode-output').value = result;
+  };
+});
+
+// Encode buttons
+document.querySelectorAll('[data-encode]').forEach(btn => {
+  btn.onclick = () => {
+    const input = getEncodeInput();
+    if (!input) { toast('No input', 'info'); return; }
+    let result = '';
+    try {
+      switch(btn.dataset.encode) {
+        case 'base64': result = btoa(unescape(encodeURIComponent(input))); break;
+        case 'url': result = encodeURIComponent(input); break;
+        case 'html': result = input.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); break;
+        case 'hex': result = Array.from(input).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' '); break;
+        case 'unicode': result = Array.from(input).map(c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')).join(''); break;
+        case 'binary': result = Array.from(input).map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join(' '); break;
+      }
+    } catch(e) { result = `Error: ${e.message}`; }
+    document.getElementById('encode-output').value = result;
+  };
+});
+
+document.getElementById('encode-copy-result').onclick = () => {
+  const val = document.getElementById('encode-output').value;
+  if (val) { navigator.clipboard.writeText(val); toast('Copied', 'success'); }
+};
+
+document.getElementById('encode-swap').onclick = () => {
+  const inp = document.getElementById('encode-input');
+  const out = document.getElementById('encode-output');
+  const tmp = inp.value;
+  inp.value = out.value;
+  out.value = tmp;
+};
+
+// ══════════════════════════════════════════════════
+// FEATURE 5: SCRATCH PAD (persistent notes)
+// ══════════════════════════════════════════════════
+function loadScratchPad() {
+  const area = document.getElementById('scratch-pad-area');
+  area.value = localStorage.getItem('campad-scratch') || '';
+}
+
+function saveScratchPad() {
+  localStorage.setItem('campad-scratch', document.getElementById('scratch-pad-area').value);
+}
+
+document.getElementById('scratch-pad-area').addEventListener('input', saveScratchPad);
+document.getElementById('scratch-timestamp').onclick = () => {
+  const area = document.getElementById('scratch-pad-area');
+  const ts = `\n--- ${new Date().toLocaleString('sv-SE')} ---\n`;
+  area.value += ts;
+  area.scrollTop = area.scrollHeight;
+  saveScratchPad();
+};
+document.getElementById('scratch-clear').onclick = () => {
+  if (confirm('Clear all notes?')) {
+    document.getElementById('scratch-pad-area').value = '';
+    saveScratchPad();
+  }
+};
+
+// Add new commands to command palette
+COMMANDS.push(
+  {name: 'Inspect File', shortcut: '', action: () => toggleRightPanel('inspect')},
+  {name: 'Hex View', shortcut: '', action: () => toggleRightPanel('hex')},
+  {name: 'Security Scan', shortcut: '', action: () => { toggleRightPanel('strings'); setTimeout(runScan, 100); }},
+  {name: 'Encoding Converter', shortcut: '', action: () => toggleRightPanel('encoding')},
+  {name: 'Scratch Pad / Notes', shortcut: '', action: () => toggleRightPanel('scratch')},
+  {name: 'Export Hex for LLM', shortcut: '', action: () => { toggleRightPanel('hex'); setTimeout(() => document.getElementById('hex-export-btn').click(), 100); }},
+);
+
+// ══════════════════════════════════════════════════
+// ELECTRON NATIVE FILE I/O (if available)
+// ══════════════════════════════════════════════════
+const isElectron = window.electronAPI?.isElectron;
+
+if (isElectron) {
+  // Override save to use native filesystem
+  window._nativeSave = async function() {
+    const tab = tabs.find(t => t.id === activeTabId);
+    if (!tab) return;
+    tab.content = window.editorView.state.doc.toString();
+
+    if (tab.filePath) {
+      const result = await window.electronAPI.saveFile(tab.filePath, tab.content);
+      if (result.success) {
+        tab.modified = false;
+        renderTabs();
+        updateStatusBar();
+        toast(`Saved ${tab.filename}`, 'success');
+      } else {
+        toast(`Error: ${result.error}`, 'error');
+      }
+    } else {
+      window._nativeSaveAs();
+    }
+  };
+
+  window._nativeSaveAs = async function() {
+    const tab = tabs.find(t => t.id === activeTabId);
+    if (!tab) return;
+    tab.content = window.editorView.state.doc.toString();
+
+    const result = await window.electronAPI.saveFileAs(tab.filename, tab.content);
+    if (result.success) {
+      tab.filename = result.name;
+      tab.filePath = result.path;
+      tab.language = detectLanguage(result.name);
+      tab.modified = false;
+      changeLanguage(tab.language);
+      renderTabs();
+      updateStatusBar();
+      window.electronAPI.setTitle(`CamPad — ${tab.filename}`);
+      toast(`Saved as ${result.name}`, 'success');
+    }
+  };
+
+  // Override save/saveAs with native versions
+  save = window._nativeSave;
+  saveAs = window._nativeSaveAs;
+
+  // Listen for files opened from main process
+  window.electronAPI.onOpenFile(({ path: filePath, name, content }) => {
+    // Check if already open
+    const existing = tabs.find(t => t.filePath === filePath);
+    if (existing) {
+      switchTab(existing.id);
+      return;
+    }
+    const tab = createTab(name, content);
+    tab.filePath = filePath;
+    tab.modified = false;
+    tab.language = detectLanguage(name);
+    changeLanguage(tab.language);
+    renderTabs();
+    window.electronAPI.setTitle(`CamPad — ${name}`);
+  });
+
+  // Menu events from native menu
+  window.electronAPI.onMenuNewFile(() => createTab());
+  window.electronAPI.onMenuSave(() => save());
+  window.electronAPI.onMenuSaveAs(() => saveAs());
+  window.electronAPI.onMenuCloseTab(() => closeTab(activeTabId));
+  window.electronAPI.onMenuFind(() => toggleFind(false));
+  window.electronAPI.onMenuReplace(() => toggleFind(true));
+  window.electronAPI.onMenuGotoLine(() => showGotoLine());
+  window.electronAPI.onMenuCommandPalette(() => showCommandPalette());
+  window.electronAPI.onMenuToggleWordwrap(() => toggleWordWrap());
+  window.electronAPI.onMenuToggleMinimap(() => toggleMinimap());
+  window.electronAPI.onMenuZoomIn(() => zoomIn());
+  window.electronAPI.onMenuZoomOut(() => zoomOut());
+  window.electronAPI.onMenuZoomReset(() => resetZoom());
+
+  // Analyze menu
+  window.electronAPI.onMenuInspect(() => toggleRightPanel('inspect'));
+  window.electronAPI.onMenuHex(() => toggleRightPanel('hex'));
+  window.electronAPI.onMenuScan(() => { toggleRightPanel('strings'); setTimeout(runScan, 100); });
+  window.electronAPI.onMenuEncoding(() => toggleRightPanel('encoding'));
+  window.electronAPI.onMenuScratch(() => toggleRightPanel('scratch'));
+
+  // Update title on tab switch
+  const _origSwitchTab = switchTab;
+  switchTab = function(id) {
+    _origSwitchTab(id);
+    const tab = tabs.find(t => t.id === id);
+    if (tab) window.electronAPI.setTitle(`CamPad — ${tab.filename}`);
+  };
+}
+
+// Welcome toast
+toast('CamPad loaded — Ctrl+Shift+P for commands', 'info');
+
+// ══════════════════════════════════════════════════
+// UPDATE SYSTEM UI
+// ══════════════════════════════════════════════════
+(() => {
+  const overlay = document.getElementById('update-overlay');
+  const uTitle = document.getElementById('update-title');
+  const info = document.getElementById('update-info');
+  const notes = document.getElementById('update-notes');
+  const progress = document.getElementById('update-progress');
+  const progressBar = document.getElementById('update-progress-bar');
+  const actions = document.getElementById('update-actions');
+  const badge = document.getElementById('update-badge');
+
+  let pendingUpdate = null;
+
+  function showDialog() { overlay.classList.add('visible'); }
+  function hideDialog() { overlay.classList.remove('visible'); }
+
+  function setActions(buttons) {
+    actions.innerHTML = '';
+    buttons.forEach(b => {
+      const btn = document.createElement('button');
+      btn.textContent = b.label;
+      if (b.primary) btn.className = 'primary';
+      btn.onclick = b.action;
+      actions.appendChild(btn);
+    });
+  }
+
+  window.electronAPI.onUpdateStatus((data) => {
+    switch (data.status) {
+      case 'checking':
+        uTitle.textContent = 'Kollar efter uppdateringar...';
+        info.textContent = 'Ansluter till uppdateringsservern.';
+        notes.style.display = 'none';
+        progress.style.display = 'none';
+        setActions([{ label: 'Avbryt', action: hideDialog }]);
+        showDialog();
+        break;
+
+      case 'available':
+        uTitle.textContent = 'Ny version tillgänglig!';
+        info.innerHTML = `Version <span class="update-version">${data.version}</span> är redo att laddas ner.`;
+        if (data.releaseNotes) {
+          notes.textContent = typeof data.releaseNotes === 'string' ? data.releaseNotes : JSON.stringify(data.releaseNotes, null, 2);
+          notes.style.display = 'block';
+        }
+        progress.style.display = 'none';
+        badge.classList.add('visible');
+        setActions([
+          { label: 'Inte nu', action: hideDialog },
+          { label: 'Ladda ner', primary: true, action: () => window.electronAPI.downloadUpdate() }
+        ]);
+        showDialog();
+        break;
+
+      case 'up-to-date':
+        uTitle.textContent = 'Redan uppdaterad';
+        info.textContent = `Du kör senaste versionen (${data.version}).`;
+        notes.style.display = 'none';
+        progress.style.display = 'none';
+        setActions([{ label: 'OK', primary: true, action: hideDialog }]);
+        break;
+
+      case 'downloading':
+        uTitle.textContent = 'Laddar ner uppdatering...';
+        info.textContent = `${data.percent}% — ${(data.transferred / 1048576).toFixed(1)} / ${(data.total / 1048576).toFixed(1)} MB`;
+        progress.style.display = 'block';
+        progressBar.style.width = data.percent + '%';
+        notes.style.display = 'none';
+        setActions([]);
+        break;
+
+      case 'ready':
+        uTitle.textContent = 'Uppdatering redo att installera';
+        info.innerHTML = `Version <span class="update-version">${data.version}</span> har laddats ner och verifierats.`;
+        if (data.releaseNotes) {
+          notes.textContent = typeof data.releaseNotes === 'string' ? data.releaseNotes : JSON.stringify(data.releaseNotes, null, 2);
+          notes.style.display = 'block';
+        }
+        progress.style.display = 'none';
+        pendingUpdate = data;
+        badge.classList.add('visible');
+        badge.textContent = 'INSTALL';
+        setActions([
+          { label: 'Senare', action: hideDialog },
+          { label: 'Installera & starta om', primary: true, action: () => window.electronAPI.installUpdate() }
+        ]);
+        showDialog();
+        break;
+
+      case 'error':
+        uTitle.textContent = 'Uppdateringsfel';
+        info.textContent = data.message;
+        notes.style.display = 'none';
+        progress.style.display = 'none';
+        setActions([{ label: 'OK', action: hideDialog }]);
+        break;
+    }
+  });
+
+  window.electronAPI.onMenuCheckUpdates(async () => {
+    uTitle.textContent = 'Kollar efter uppdateringar...';
+    info.textContent = 'Ansluter...';
+    notes.style.display = 'none';
+    progress.style.display = 'none';
+    setActions([{ label: 'Avbryt', action: hideDialog }]);
+    showDialog();
+
+    const [remote, local] = await Promise.all([
+      window.electronAPI.checkForUpdates().catch(e => ({ success: false, error: e.message })),
+      window.electronAPI.checkLocalUpdates()
+    ]);
+
+    if (!remote.success || !remote.version) {
+      if (local.success && local.hasUpdate) {
+        uTitle.textContent = 'Lokal patch hittad!';
+        info.innerHTML = `Version <span class="update-version">${local.version}</span> finns i den lokala patchmappen.`;
+        notes.textContent = 'Sökväg: ' + local.installerPath;
+        notes.style.display = 'block';
+        setActions([
+          { label: 'Avbryt', action: hideDialog },
+          { label: 'Öppna patchmapp', action: () => window.electronAPI.openLocalUpdatesFolder() },
+          { label: 'Installera', primary: true, action: () => window.electronAPI.installLocalUpdate(local.installerPath) }
+        ]);
+      } else {
+        const ver = await window.electronAPI.getAppVersion();
+        uTitle.textContent = 'Redan uppdaterad';
+        info.textContent = `Du kör senaste versionen (${ver}).`;
+        notes.style.display = 'none';
+        setActions([
+          { label: 'Öppna patchmapp', action: () => { window.electronAPI.openLocalUpdatesFolder(); hideDialog(); }},
+          { label: 'OK', primary: true, action: hideDialog }
+        ]);
+      }
+    }
+  });
+
+  badge.onclick = () => {
+    if (pendingUpdate) {
+      uTitle.textContent = 'Uppdatering redo att installera';
+      info.innerHTML = `Version <span class="update-version">${pendingUpdate.version}</span> är redo.`;
+      setActions([
+        { label: 'Senare', action: hideDialog },
+        { label: 'Installera & starta om', primary: true, action: () => window.electronAPI.installUpdate() }
+      ]);
+      showDialog();
+    }
+  };
+
+  overlay.onclick = (e) => { if (e.target === overlay) hideDialog(); };
+})();
+
+// ══════════════════════════════════════════════════
+// INITIAL FOCUS
+// ══════════════════════════════════════════════════
+window.editorView.focus();
+</script>
+</body>
+</html>

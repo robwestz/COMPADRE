@@ -1,0 +1,81 @@
+{
+  "name": "campad",
+  "version": "2.0.0",
+  "description": "CamPad — A fast, modern text editor for Windows",
+  "main": "src/main.js",
+  "scripts": {
+    "build:cm": "esbuild src/editor/cm-bundle.js --bundle --format=iife --global-name=CM --outfile=src/editor/cm.js",
+    "start": "npm run build:cm && electron .",
+    "pack": "npm run build:cm && electron-builder --dir",
+    "dist": "npm run build:cm && electron-builder",
+    "dist:win": "npm run build:cm && electron-builder --win",
+    "dist:portable": "npm run build:cm && electron-builder --win portable",
+    "release": "npm run build:cm && electron-builder --win --publish always",
+    "release:draft": "npm run build:cm && electron-builder --win --publish onTagOrDraft",
+    "version:patch": "npm version patch --no-git-tag-version",
+    "version:minor": "npm version minor --no-git-tag-version",
+    "version:major": "npm version major --no-git-tag-version"
+  },
+  "author": "Camjo AB",
+  "license": "MIT",
+  "devDependencies": {
+    "@codemirror/autocomplete": "^6.18.6",
+    "@codemirror/commands": "^6.8.0",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.9",
+    "@codemirror/lang-javascript": "^6.2.3",
+    "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/lang-markdown": "^6.3.2",
+    "@codemirror/lang-php": "^6.0.1",
+    "@codemirror/lang-python": "^6.1.7",
+    "@codemirror/lang-sql": "^6.8.0",
+    "@codemirror/lang-xml": "^6.1.0",
+    "@codemirror/language": "^6.10.8",
+    "@codemirror/search": "^6.5.10",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.35.3",
+    "@lezer/highlight": "^1.2.1",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.0",
+    "esbuild": "^0.27.4"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
+  },
+  "build": {
+    "appId": "com.camjo.campad",
+    "productName": "CamPad",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "!src/editor/cm-bundle.js"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "src/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CamPad"
+    },
+    "portable": {
+      "artifactName": "CamPad-Portable-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "robwestz",
+        "repo": "COMPADRE",
+        "releaseType": "release"
+      }
+    ]
+  }
+}
