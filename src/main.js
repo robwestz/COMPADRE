@@ -195,10 +195,36 @@ async function openFolderDialog() {
 // IPC HANDLERS (renderer → main)
 // ══════════════════════════════════════════════════
 
+// Encoding map for Node.js
+const ENCODING_MAP = {
+  'UTF-8': 'utf-8',
+  'ASCII': 'ascii',
+  'UTF-16 LE': 'utf16le',
+  'ISO-8859-1': 'latin1',
+  'Windows-1252': 'latin1', // Node treats latin1 as Windows-1252 superset
+  'UTF-16 BE': 'utf16le', // We'll handle BE manually
+};
+
 // Save file to disk
-ipcMain.handle('save-file', async (event, { filePath, content }) => {
+ipcMain.handle('save-file', async (event, { filePath, content, encoding }) => {
   try {
-    fs.writeFileSync(filePath, content, 'utf-8');
+    const enc = ENCODING_MAP[encoding] || 'utf-8';
+    if (encoding === 'UTF-16 BE') {
+      // Write UTF-16 BE with BOM
+      const buf = Buffer.from('\uFEFF' + content, 'utf16le');
+      // Swap bytes for BE
+      for (let i = 0; i < buf.length; i += 2) {
+        const tmp = buf[i];
+        buf[i] = buf[i + 1];
+        buf[i + 1] = tmp;
+      }
+      fs.writeFileSync(filePath, buf);
+    } else if (encoding === 'UTF-16 LE') {
+      const buf = Buffer.from('\uFEFF' + content, 'utf16le');
+      fs.writeFileSync(filePath, buf);
+    } else {
+      fs.writeFileSync(filePath, content, enc);
+    }
     return { success: true, path: filePath };
   } catch (err) {
     return { success: false, error: err.message };
@@ -206,7 +232,7 @@ ipcMain.handle('save-file', async (event, { filePath, content }) => {
 });
 
 // Save As dialog
-ipcMain.handle('save-file-as', async (event, { defaultName, content }) => {
+ipcMain.handle('save-file-as', async (event, { defaultName, content, encoding }) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     defaultPath: defaultName,
     filters: [
@@ -219,8 +245,19 @@ ipcMain.handle('save-file-as', async (event, { defaultName, content }) => {
   if (result.canceled) return { success: false, canceled: true };
 
   try {
-    fs.writeFileSync(result.filePath, content, 'utf-8');
+    const enc = ENCODING_MAP[encoding] || 'utf-8';
+    fs.writeFileSync(result.filePath, content, enc);
     return { success: true, path: result.filePath, name: path.basename(result.filePath) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// Reveal file in system explorer
+ipcMain.handle('reveal-in-explorer', async (event, filePath) => {
+  try {
+    shell.showItemInFolder(path.resolve(filePath));
+    return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
   }

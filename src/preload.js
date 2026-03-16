@@ -7,11 +7,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── File Operations ──
-  saveFile: (filePath, content) => ipcRenderer.invoke('save-file', { filePath, content }),
-  saveFileAs: (defaultName, content) => ipcRenderer.invoke('save-file-as', { defaultName, content }),
+  saveFile: (filePath, content, encoding) => ipcRenderer.invoke('save-file', { filePath, content, encoding }),
+  saveFileAs: (defaultName, content, encoding) => ipcRenderer.invoke('save-file-as', { defaultName, content, encoding }),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   getFileInfo: (filePath) => ipcRenderer.invoke('get-file-info', filePath),
   readDirectory: (dirPath) => ipcRenderer.invoke('read-directory', dirPath),
+  revealInExplorer: (filePath) => ipcRenderer.invoke('reveal-in-explorer', filePath),
 
   // ── Window ──
   setTitle: (title) => ipcRenderer.send('set-title', title),

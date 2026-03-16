@@ -1030,6 +1030,22 @@
   </div>
 </div>
 
+<!-- ENCODING SELECTOR -->
+<div id="encoding-selector" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;padding-top:15vh;">
+  <div id="encoding-selector-box" style="width:360px;max-height:400px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:10px;box-shadow:0 16px 64px rgba(0,0,0,0.6);display:flex;flex-direction:column;overflow:hidden;align-self:flex-start;">
+    <input type="text" id="encoding-search-input" placeholder="Select encoding..." autocomplete="off" style="width:100%;padding:14px 16px;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:14px;outline:none;" />
+    <div id="encoding-list" style="overflow-y:auto;padding:4px;flex:1;"></div>
+  </div>
+</div>
+
+<!-- EOL SELECTOR -->
+<div id="eol-selector" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;padding-top:15vh;">
+  <div id="eol-selector-box" style="width:360px;max-height:300px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:10px;box-shadow:0 16px 64px rgba(0,0,0,0.6);display:flex;flex-direction:column;overflow:hidden;align-self:flex-start;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);color:var(--text-secondary);font-size:12px;">Select End of Line Sequence</div>
+    <div id="eol-list" style="overflow-y:auto;padding:4px;flex:1;"></div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast-container"></div>
 
@@ -1060,9 +1076,9 @@
 const {EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
   drawSelection, dropCursor, rectangularSelection, crosshairCursor,
   highlightSpecialChars,
-  EditorState, Compartment,
+  EditorState, EditorSelection, Compartment,
   defaultKeymap, history, historyKeymap, indentWithTab,
-  syntaxHighlighting, defaultHighlightStyle, indentOnInput,
+  syntaxHighlighting, defaultHighlightStyle, indentOnInput, indentUnit,
   bracketMatching, foldGutter, foldKeymap, HighlightStyle,
   tags,
   searchKeymap, highlightSelectionMatches,
@@ -1076,7 +1092,8 @@ const {EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLine
 const LANGUAGES = {
   'Plain Text':  { ext: ['.txt', '.log', '.text'], lang: null },
   'JavaScript':  { ext: ['.js', '.mjs', '.cjs', '.jsx'], lang: javascript },
-  'TypeScript':  { ext: ['.ts', '.tsx'], lang: () => javascript({typescript: true}) },
+  'TypeScript':  { ext: ['.ts'], lang: () => javascript({typescript: true}) },
+  'TypeScript JSX': { ext: ['.tsx'], lang: () => javascript({typescript: true, jsx: true}) },
   'HTML':        { ext: ['.html', '.htm', '.svg'], lang: htmlLang },
   'CSS':         { ext: ['.css', '.scss', '.less'], lang: cssLang },
   'JSON':        { ext: ['.json', '.jsonc'], lang: jsonLang },
@@ -1085,10 +1102,26 @@ const LANGUAGES = {
   'XML':         { ext: ['.xml', '.xsl', '.xsd', '.wsdl'], lang: xml },
   'SQL':         { ext: ['.sql'], lang: sql },
   'PHP':         { ext: ['.php'], lang: php },
+  'Rust':        { ext: ['.rs'], lang: null },
+  'Go':          { ext: ['.go'], lang: null },
+  'C':           { ext: ['.c', '.h'], lang: null },
+  'C++':         { ext: ['.cpp', '.cc', '.cxx', '.hpp', '.hh'], lang: null },
+  'Java':        { ext: ['.java'], lang: null },
+  'Ruby':        { ext: ['.rb', '.rake', '.gemspec'], lang: null },
+  'Shell/Bash':  { ext: ['.sh', '.bash', '.zsh', '.fish'], lang: null },
+  'YAML':        { ext: ['.yml', '.yaml'], lang: null },
+  'TOML':        { ext: ['.toml'], lang: null },
+  'Dockerfile':  { ext: ['.dockerfile'], lang: null },
+  '.env':        { ext: ['.env', '.env.local', '.env.production'], lang: null },
+  'INI':         { ext: ['.ini', '.cfg', '.properties', '.conf'], lang: null },
+  'Diff':        { ext: ['.diff', '.patch'], lang: null },
 };
 
 function detectLanguage(filename) {
   if (!filename) return 'Plain Text';
+  const base = filename.split(/[/\\]/).pop().toLowerCase();
+  if (base === 'dockerfile' || base.startsWith('dockerfile.')) return 'Dockerfile';
+  if (base === '.env' || base.startsWith('.env.')) return '.env';
   const ext = '.' + filename.split('.').pop().toLowerCase();
   for (const [name, cfg] of Object.entries(LANGUAGES)) {
     if (cfg.ext.includes(ext)) return name;
@@ -1151,6 +1184,8 @@ let tabCounter = 0;
 
 const languageCompartment = new Compartment();
 const wordWrapCompartment = new Compartment();
+const indentCompartment = new Compartment();
+const lineNumbersCompartment = new Compartment();
 
 function createTab(filename, content = '', fileHandle = null) {
   const id = ++tabCounter;
@@ -1160,6 +1195,8 @@ function createTab(filename, content = '', fileHandle = null) {
     filename: filename || `Untitled-${id}`,
     content,
     language: lang,
+    encoding: 'UTF-8',
+    eol: content.includes('\r\n') ? 'CRLF' : 'LF',
     modified: false,
     fileHandle,
     scrollPos: null,
@@ -1251,7 +1288,7 @@ let fontSize = 14;
 
 function getEditorExtensions(langExt = []) {
   return [
-    lineNumbers(),
+    lineNumbersCompartment.of(lineNumbers()),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
     history(),
@@ -1272,6 +1309,7 @@ function getEditorExtensions(langExt = []) {
     syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
     languageCompartment.of(langExt),
     wordWrapCompartment.of(wordWrapEnabled ? EditorView.lineWrapping : []),
+    indentCompartment.of([EditorState.tabSize.of(2), indentUnit.of('  ')]),
     keymap.of([
       ...closeBracketsKeymap,
       ...defaultKeymap,
@@ -1370,7 +1408,11 @@ function saveAs() {
 }
 
 function downloadFile(filename, content) {
-  const blob = new Blob([content], {type: 'text/plain'});
+  const tab = tabs.find(t => t.id === activeTabId);
+  let saveContent = content;
+  if (tab?.eol === 'CRLF') saveContent = saveContent.replace(/\n/g, '\r\n');
+  else if (tab?.eol === 'CR') saveContent = saveContent.replace(/\n/g, '\r');
+  const blob = new Blob([saveContent], {type: 'text/plain;charset=' + (tab?.encoding || 'utf-8').toLowerCase()});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
@@ -1544,10 +1586,13 @@ const COMMANDS = [
   {name: 'Go to Line', shortcut: 'Ctrl+G', action: showGotoLine},
   {name: 'Toggle Word Wrap', shortcut: '', action: toggleWordWrap},
   {name: 'Toggle Minimap', shortcut: '', action: toggleMinimap},
+  {name: 'Toggle Line Numbers', shortcut: '', action: toggleLineNumbers},
   {name: 'Zoom In', shortcut: 'Ctrl+=', action: zoomIn},
   {name: 'Zoom Out', shortcut: 'Ctrl+-', action: zoomOut},
   {name: 'Reset Zoom', shortcut: 'Ctrl+0', action: resetZoom},
   {name: 'Select Language', shortcut: '', action: showLangSelector},
+  {name: 'Change Encoding', shortcut: '', action: () => showSubPicker(ENCODINGS.map(e => ({name: e, action: () => changeEncoding(e)})), 'Select Encoding')},
+  {name: 'Change Line Endings', shortcut: '', action: () => showSubPicker(EOL_OPTIONS.map(o => ({name: `${o.label} — ${o.desc}`, action: () => changeEol(o.name)})), 'Select Line Ending')},
   {name: 'Duplicate Line', shortcut: '', action: duplicateLine},
   {name: 'Move Line Up', shortcut: 'Alt+↑', action: moveLineUp},
   {name: 'Move Line Down', shortcut: 'Alt+↓', action: moveLineDown},
@@ -1564,28 +1609,206 @@ const COMMANDS = [
   {name: 'Indent With Tabs', shortcut: '', action: () => setIndent('tab')},
   {name: 'Indent With 2 Spaces', shortcut: '', action: () => setIndent(2)},
   {name: 'Indent With 4 Spaces', shortcut: '', action: () => setIndent(4)},
+  {name: 'Select All Occurrences', shortcut: '', action: selectAllOccurrences},
+  {name: 'Convert Indentation to Spaces', shortcut: '', action: () => convertIndentation('spaces')},
+  {name: 'Convert Indentation to Tabs', shortcut: '', action: () => convertIndentation('tabs')},
+  {name: 'Copy File Path', shortcut: '', action: copyFilePath},
+  {name: 'Reveal in Explorer', shortcut: '', action: revealInExplorer},
+  {name: 'Check for Updates', shortcut: '', action: checkForUpdates},
+  {name: 'Word Count', shortcut: '', action: showWordCount},
 ];
 
+// ── New command implementations ──
+let lineNumbersVisible = true;
+function toggleLineNumbers() {
+  lineNumbersVisible = !lineNumbersVisible;
+  window.editorView.dispatch({
+    effects: lineNumbersCompartment.reconfigure(lineNumbersVisible ? lineNumbers() : [])
+  });
+  toast(`Line numbers ${lineNumbersVisible ? 'shown' : 'hidden'}`, 'info');
+}
+
+function selectAllOccurrences() {
+  const state = window.editorView.state;
+  const {from, to} = state.selection.main;
+  if (from === to) { toast('Select text first', 'info'); return; }
+  const word = state.sliceDoc(from, to);
+  const doc = state.doc.toString();
+  const ranges = [];
+  let idx = 0;
+  while ((idx = doc.indexOf(word, idx)) !== -1) {
+    ranges.push(EditorSelection.range(idx, idx + word.length));
+    idx += word.length;
+  }
+  if (ranges.length > 0) {
+    window.editorView.dispatch({
+      selection: EditorSelection.create(ranges)
+    });
+    toast(`Selected ${ranges.length} occurrences`, 'info');
+  }
+}
+
+function convertIndentation(type) {
+  const doc = window.editorView.state.doc;
+  const lines = [];
+  for (let i = 1; i <= doc.lines; i++) {
+    const line = doc.line(i).text;
+    if (type === 'spaces') {
+      lines.push(line.replace(/^\t+/, m => '  '.repeat(m.length)));
+    } else {
+      lines.push(line.replace(/^(  )+/, m => '\t'.repeat(m.length / 2)));
+    }
+  }
+  window.editorView.dispatch({
+    changes: {from: 0, to: doc.length, insert: lines.join('\n')}
+  });
+  toast(`Converted indentation to ${type}`, 'info');
+}
+
+function copyFilePath() {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (tab?.filePath) {
+    navigator.clipboard.writeText(tab.filePath);
+    toast('Path copied to clipboard', 'success');
+  } else {
+    toast('File has no saved path', 'info');
+  }
+}
+
+function revealInExplorer() {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (tab?.filePath && window.electronAPI?.revealInExplorer) {
+    window.electronAPI.revealInExplorer(tab.filePath);
+  } else {
+    toast('File has no saved path', 'info');
+  }
+}
+
+function checkForUpdates() {
+  if (window.electronAPI?.isElectron) {
+    // Simulate the menu-check-updates event by dispatching it
+    const event = new CustomEvent('campad-check-updates');
+    window.dispatchEvent(event);
+  } else {
+    toast('Updates only available in Electron', 'info');
+  }
+}
+
+function showWordCount() {
+  const content = window.editorView.state.doc.toString();
+  const words = content.split(/\s+/).filter(w => w.length > 0).length;
+  const chars = content.length;
+  const lines = window.editorView.state.doc.lines;
+  toast(`Words: ${words.toLocaleString()} | Chars: ${chars.toLocaleString()} | Lines: ${lines.toLocaleString()}`, 'info');
+}
+
+// ── Command Palette state ──
 let commandPaletteOpen = false;
 let selectedCommandIdx = 0;
+let paletteCustomItems = null; // for sub-pickers
 
-function showCommandPalette() {
+function showCommandPalette(prefill = '') {
   commandPaletteOpen = true;
+  paletteCustomItems = null;
   document.getElementById('command-palette-overlay').classList.add('open');
   const input = document.getElementById('command-input');
-  input.value = '';
+  input.value = prefill;
+  input.placeholder = 'Type > for commands, : for go to line, @ for symbols...';
   input.focus();
-  renderCommands('');
+  renderPalette(prefill);
 }
 
 function hideCommandPalette() {
   commandPaletteOpen = false;
+  paletteCustomItems = null;
   document.getElementById('command-palette-overlay').classList.remove('open');
+  document.getElementById('command-input').placeholder = 'Type a command...';
   window.editorView.focus();
 }
 
-function renderCommands(filter) {
+function showSubPicker(items, placeholder) {
+  // Show a sub-picker inside the command palette
+  paletteCustomItems = items;
+  if (!commandPaletteOpen) {
+    commandPaletteOpen = true;
+    document.getElementById('command-palette-overlay').classList.add('open');
+  }
+  const input = document.getElementById('command-input');
+  input.value = '';
+  input.placeholder = placeholder || 'Select...';
+  input.focus();
+  renderPalette('');
+}
+
+function renderPalette(rawFilter) {
   const results = document.getElementById('command-results');
+
+  // Sub-picker mode
+  if (paletteCustomItems) {
+    const filter = rawFilter.toLowerCase();
+    const filtered = paletteCustomItems.filter(c => c.name.toLowerCase().includes(filter));
+    selectedCommandIdx = 0;
+    results.innerHTML = filtered.map((c, i) => `
+      <div class="command-result ${i === 0 ? 'selected' : ''}" data-idx="${i}">
+        <span class="cmd-name">${c.name}</span>
+      </div>
+    `).join('');
+    results.querySelectorAll('.command-result').forEach((el, i) => {
+      el.onclick = () => { filtered[i].action(); hideCommandPalette(); };
+      el.onmouseover = () => {
+        results.querySelectorAll('.command-result').forEach(e => e.classList.remove('selected'));
+        el.classList.add('selected');
+        selectedCommandIdx = i;
+      };
+    });
+    return;
+  }
+
+  // `:` prefix → go to line
+  if (rawFilter.startsWith(':')) {
+    const lineNum = rawFilter.slice(1);
+    results.innerHTML = `<div class="command-result selected" data-idx="0"><span class="cmd-name">Go to line ${lineNum || '...'}</span><span class="cmd-shortcut">Enter to jump</span></div>`;
+    selectedCommandIdx = 0;
+    results.querySelector('.command-result').onclick = () => {
+      paletteGotoLine(lineNum);
+      hideCommandPalette();
+    };
+    return;
+  }
+
+  // `@` prefix → symbol/heading navigation
+  if (rawFilter.startsWith('@')) {
+    const symbolFilter = rawFilter.slice(1).toLowerCase();
+    const doc = window.editorView.state.doc;
+    const headings = [];
+    for (let i = 1; i <= doc.lines; i++) {
+      const text = doc.line(i).text;
+      // Match headings: markdown #, JS function/class, comments with ═══, section titles
+      if (/^#{1,6}\s/.test(text) || /^\s*(function|class|const|let|var)\s+\w/.test(text) || /═══/.test(text)) {
+        headings.push({line: i, text: text.trim()});
+      }
+    }
+    const filtered = headings.filter(h => h.text.toLowerCase().includes(symbolFilter));
+    selectedCommandIdx = 0;
+    results.innerHTML = filtered.slice(0, 30).map((h, i) => `
+      <div class="command-result ${i === 0 ? 'selected' : ''}" data-idx="${i}" data-line="${h.line}">
+        <span class="cmd-name">${escapeHtml(h.text.slice(0, 60))}</span>
+        <span class="cmd-shortcut">Ln ${h.line}</span>
+      </div>
+    `).join('');
+    results.querySelectorAll('.command-result').forEach((el, i) => {
+      el.onclick = () => { paletteGotoLine(el.dataset.line); hideCommandPalette(); };
+      el.onmouseover = () => {
+        results.querySelectorAll('.command-result').forEach(e => e.classList.remove('selected'));
+        el.classList.add('selected');
+        selectedCommandIdx = i;
+      };
+    });
+    return;
+  }
+
+  // `>` prefix or default → commands
+  const filter = rawFilter.startsWith('>') ? rawFilter.slice(1).trim() : rawFilter;
   const filtered = COMMANDS.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()));
   selectedCommandIdx = 0;
   results.innerHTML = filtered.map((c, i) => `
@@ -1605,15 +1828,44 @@ function renderCommands(filter) {
   });
 }
 
-document.getElementById('command-input').addEventListener('input', (e) => renderCommands(e.target.value));
+function paletteGotoLine(lineStr) {
+  const parts = String(lineStr).split(':');
+  const line = parseInt(parts[0]) || 1;
+  const col = parseInt(parts[1]) || 1;
+  const doc = window.editorView.state.doc;
+  const clampedLine = Math.max(1, Math.min(line, doc.lines));
+  const lineInfo = doc.line(clampedLine);
+  const pos = Math.min(lineInfo.from + col - 1, lineInfo.to);
+  window.editorView.dispatch({
+    selection: {anchor: pos},
+    scrollIntoView: true,
+    effects: EditorView.scrollIntoView(pos, {y: 'center'})
+  });
+}
+
+document.getElementById('command-input').addEventListener('input', (e) => renderPalette(e.target.value));
 document.getElementById('command-input').addEventListener('keydown', (e) => {
   const items = document.querySelectorAll('.command-result');
   if (e.key === 'ArrowDown') { e.preventDefault(); selectedCommandIdx = Math.min(selectedCommandIdx + 1, items.length - 1); }
   if (e.key === 'ArrowUp') { e.preventDefault(); selectedCommandIdx = Math.max(selectedCommandIdx - 1, 0); }
   items.forEach((el, i) => el.classList.toggle('selected', i === selectedCommandIdx));
   items[selectedCommandIdx]?.scrollIntoView({block: 'nearest'});
-  if (e.key === 'Enter') { items[selectedCommandIdx]?.click(); }
+  if (e.key === 'Enter') {
+    const val = document.getElementById('command-input').value;
+    if (val.startsWith(':') && !paletteCustomItems) {
+      paletteGotoLine(val.slice(1));
+      hideCommandPalette();
+    } else {
+      items[selectedCommandIdx]?.click();
+    }
+  }
   if (e.key === 'Escape') hideCommandPalette();
+  if (e.key === 'Backspace' && document.getElementById('command-input').value === '' && paletteCustomItems) {
+    // Go back to main palette from sub-picker
+    paletteCustomItems = null;
+    document.getElementById('command-input').placeholder = 'Type > for commands, : for go to line, @ for symbols...';
+    renderPalette('');
+  }
 });
 document.getElementById('command-palette-overlay').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) hideCommandPalette();
@@ -1698,6 +1950,92 @@ function changeLanguage(langName) {
   });
   updateStatusBar();
 }
+
+// ══════════════════════════════════════════════════
+// ENCODING SELECTOR
+// ══════════════════════════════════════════════════
+const ENCODINGS = ['UTF-8', 'UTF-16 LE', 'UTF-16 BE', 'ISO-8859-1', 'Windows-1252', 'ASCII'];
+
+function showEncodingSelector() {
+  const el = document.getElementById('encoding-selector');
+  el.style.display = 'flex';
+  el.classList.add('open');
+  const inp = document.getElementById('encoding-search-input');
+  inp.value = '';
+  inp.focus();
+  renderEncodingList('');
+}
+function hideEncodingSelector() {
+  const el = document.getElementById('encoding-selector');
+  el.style.display = 'none';
+  el.classList.remove('open');
+  window.editorView.focus();
+}
+function renderEncodingList(filter) {
+  const list = document.getElementById('encoding-list');
+  const filtered = ENCODINGS.filter(e => e.toLowerCase().includes(filter.toLowerCase()));
+  list.innerHTML = filtered.map((e, i) => `<div class="lang-option ${i===0?'selected':''}" data-enc="${e}">${e}</div>`).join('');
+  list.querySelectorAll('.lang-option').forEach(el => {
+    el.onclick = () => { changeEncoding(el.dataset.enc); hideEncodingSelector(); };
+  });
+}
+function changeEncoding(enc) {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (tab) tab.encoding = enc;
+  updateStatusBar();
+  toast(`Encoding set to ${enc}`, 'info');
+}
+document.getElementById('encoding-search-input').addEventListener('input', e => renderEncodingList(e.target.value));
+document.getElementById('encoding-search-input').addEventListener('keydown', e => {
+  if (e.key === 'Escape') hideEncodingSelector();
+  if (e.key === 'Enter') {
+    const sel = document.querySelector('#encoding-list .lang-option.selected') || document.querySelector('#encoding-list .lang-option');
+    if (sel) { changeEncoding(sel.dataset.enc); hideEncodingSelector(); }
+  }
+});
+document.getElementById('encoding-selector').addEventListener('click', e => {
+  if (e.target === e.currentTarget) hideEncodingSelector();
+});
+
+// ══════════════════════════════════════════════════
+// EOL SELECTOR
+// ══════════════════════════════════════════════════
+const EOL_OPTIONS = [
+  {name: 'LF', label: 'LF (\\n)', desc: 'Unix, macOS, Linux'},
+  {name: 'CRLF', label: 'CRLF (\\r\\n)', desc: 'Windows'},
+  {name: 'CR', label: 'CR (\\r)', desc: 'Classic Mac'},
+];
+
+function showEolSelector() {
+  const el = document.getElementById('eol-selector');
+  el.style.display = 'flex';
+  el.classList.add('open');
+  renderEolList();
+}
+function hideEolSelector() {
+  const el = document.getElementById('eol-selector');
+  el.style.display = 'none';
+  el.classList.remove('open');
+  window.editorView.focus();
+}
+function renderEolList() {
+  const list = document.getElementById('eol-list');
+  const tab = tabs.find(t => t.id === activeTabId);
+  const current = tab ? tab.eol : 'LF';
+  list.innerHTML = EOL_OPTIONS.map(o => `<div class="lang-option ${o.name===current?'selected':''}" data-eol="${o.name}">${o.label} <span style="color:var(--text-muted);font-size:11px;margin-left:8px;">${o.desc}</span></div>`).join('');
+  list.querySelectorAll('.lang-option').forEach(el => {
+    el.onclick = () => { changeEol(el.dataset.eol); hideEolSelector(); };
+  });
+}
+function changeEol(eol) {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (tab) tab.eol = eol;
+  updateStatusBar();
+  toast(`Line endings set to ${eol}`, 'info');
+}
+document.getElementById('eol-selector').addEventListener('click', e => {
+  if (e.target === e.currentTarget) hideEolSelector();
+});
 
 // ══════════════════════════════════════════════════
 // EDITOR COMMANDS
@@ -1798,20 +2136,71 @@ function insertDateTime() {
   window.editorView.dispatch({changes: {from: pos, insert: now}});
 }
 
+function getCommentSyntax() {
+  const tab = tabs.find(t => t.id === activeTabId);
+  const lang = tab ? tab.language : 'Plain Text';
+  if (['CSS'].includes(lang)) return { block: ['/* ', ' */'] };
+  if (['HTML', 'XML'].includes(lang)) return { block: ['<!-- ', ' -->'] };
+  if (['SQL'].includes(lang)) return { line: '-- ' };
+  if (['Python', 'Shell/Bash', 'YAML', '.env', 'INI'].includes(lang)) return { line: '# ' };
+  return { line: '// ' };
+}
+
 function toggleComment() {
   const state = window.editorView.state;
-  const line = state.doc.lineAt(state.selection.main.head);
-  const trimmed = line.text.trimStart();
-  if (trimmed.startsWith('// ')) {
-    const idx = line.text.indexOf('// ');
-    window.editorView.dispatch({changes: {from: line.from + idx, to: line.from + idx + 3}});
-  } else if (trimmed.startsWith('#')) {
-    const idx = line.text.indexOf('#');
-    const end = line.text[idx + 1] === ' ' ? idx + 2 : idx + 1;
-    window.editorView.dispatch({changes: {from: line.from + idx, to: line.from + end}});
-  } else {
+  const {from, to} = state.selection.main;
+  const startLine = state.doc.lineAt(from);
+  const endLine = state.doc.lineAt(to > from ? to : from);
+  const syntax = getCommentSyntax();
+
+  if (syntax.block) {
+    const [open, close] = syntax.block;
+    const text = state.sliceDoc(startLine.from, endLine.to);
+    const trimmed = text.trim();
+    if (trimmed.startsWith(open.trim()) && trimmed.endsWith(close.trim())) {
+      // Remove block comment
+      const openIdx = text.indexOf(open.trim());
+      const closeIdx = text.lastIndexOf(close.trim());
+      const inner = text.slice(openIdx + open.trim().length, closeIdx);
+      window.editorView.dispatch({
+        changes: {from: startLine.from, to: endLine.to, insert: inner}
+      });
+    } else {
+      // Add block comment
+      window.editorView.dispatch({
+        changes: {from: startLine.from, to: endLine.to, insert: open + text + close}
+      });
+    }
+    return;
+  }
+
+  // Line comment
+  const prefix = syntax.line;
+  const changes = [];
+  const lines = [];
+  for (let i = startLine.number; i <= endLine.number; i++) {
+    lines.push(state.doc.line(i));
+  }
+
+  // Check if all lines are already commented
+  const allCommented = lines.every(l => l.text.trimStart().startsWith(prefix.trim()));
+
+  for (const line of lines) {
+    const trimmed = line.text.trimStart();
     const indent = line.text.length - trimmed.length;
-    window.editorView.dispatch({changes: {from: line.from + indent, insert: '// '}});
+    if (allCommented) {
+      const commentStart = line.text.indexOf(prefix.trim(), indent);
+      if (commentStart >= 0) {
+        const removeEnd = line.text[commentStart + prefix.trim().length] === ' '
+          ? commentStart + prefix.length : commentStart + prefix.trim().length;
+        changes.push({from: line.from + commentStart, to: line.from + removeEnd});
+      }
+    } else {
+      changes.push({from: line.from + indent, insert: prefix});
+    }
+  }
+  if (changes.length > 0) {
+    window.editorView.dispatch({changes});
   }
 }
 
@@ -1820,22 +2209,43 @@ function joinLines() {
   const {from, to} = state.selection.main;
   const startLine = state.doc.lineAt(from);
   const endLine = state.doc.lineAt(to);
-  if (startLine.number === endLine.number && endLine.number < state.doc.lines) {
-    const nextLine = state.doc.line(endLine.number + 1);
-    window.editorView.dispatch({
-      changes: {from: endLine.to, to: nextLine.from + (nextLine.text.length - nextLine.text.trimStart().length), insert: ' '}
-    });
+
+  if (startLine.number === endLine.number) {
+    // No multi-line selection: join current with next
+    if (endLine.number < state.doc.lines) {
+      const nextLine = state.doc.line(endLine.number + 1);
+      window.editorView.dispatch({
+        changes: {from: endLine.to, to: nextLine.from + (nextLine.text.length - nextLine.text.trimStart().length), insert: ' '}
+      });
+    }
+  } else {
+    // Multi-line selection: join all selected lines into one
+    const changes = [];
+    for (let i = endLine.number; i > startLine.number; i--) {
+      const line = state.doc.line(i);
+      const prevLine = state.doc.line(i - 1);
+      const leadingSpaces = line.text.length - line.text.trimStart().length;
+      changes.push({from: prevLine.to, to: line.from + leadingSpaces, insert: ' '});
+    }
+    window.editorView.dispatch({changes});
+    toast(`Joined ${endLine.number - startLine.number + 1} lines`, 'info');
   }
 }
 
 function setIndent(type) {
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
+  let config;
   if (type === 'tab') {
+    config = [EditorState.tabSize.of(4), indentUnit.of('\t')];
     document.getElementById('status-indent').textContent = 'Tabs';
   } else {
+    config = [EditorState.tabSize.of(type), indentUnit.of(' '.repeat(type))];
     document.getElementById('status-indent').textContent = `Spaces: ${type}`;
   }
+  window.editorView.dispatch({
+    effects: indentCompartment.reconfigure(config)
+  });
   toast(`Indent set to ${type === 'tab' ? 'Tabs' : type + ' spaces'}`, 'info');
 }
 
@@ -1935,6 +2345,9 @@ function updateStatusBar() {
   document.getElementById('status-modified').textContent = tab?.modified ? '●' : '';
   document.getElementById('status-modified').style.color = 'var(--orange)';
 
+  document.getElementById('status-encoding').textContent = tab ? tab.encoding : 'UTF-8';
+  document.getElementById('status-eol').textContent = tab ? tab.eol : 'LF';
+
   // Selection info
   const selLen = Math.abs(main.to - main.from);
   const selEl = document.getElementById('status-selection');
@@ -1948,8 +2361,10 @@ function updateStatusBar() {
   }
 }
 
-// Language selector from status bar
+// Status bar click handlers
 document.getElementById('status-lang').onclick = showLangSelector;
+document.getElementById('status-encoding').onclick = showEncodingSelector;
+document.getElementById('status-eol').onclick = showEolSelector;
 
 // ══════════════════════════════════════════════════
 // MENU BAR
@@ -2069,7 +2484,7 @@ function toast(message, type = 'info') {
 // ══════════════════════════════════════════════════
 window.CamPad = {
   // Core API
-  version: '1.0.0',
+  version: '2.0.0',
 
   // Tab management
   createTab,
@@ -2661,9 +3076,13 @@ if (isElectron) {
     const tab = tabs.find(t => t.id === activeTabId);
     if (!tab) return;
     tab.content = window.editorView.state.doc.toString();
+    // Convert EOL before saving
+    let saveContent = tab.content;
+    if (tab.eol === 'CRLF') saveContent = saveContent.replace(/\n/g, '\r\n');
+    else if (tab.eol === 'CR') saveContent = saveContent.replace(/\n/g, '\r');
 
     if (tab.filePath) {
-      const result = await window.electronAPI.saveFile(tab.filePath, tab.content);
+      const result = await window.electronAPI.saveFile(tab.filePath, saveContent, tab.encoding);
       if (result.success) {
         tab.modified = false;
         renderTabs();
@@ -2681,8 +3100,11 @@ if (isElectron) {
     const tab = tabs.find(t => t.id === activeTabId);
     if (!tab) return;
     tab.content = window.editorView.state.doc.toString();
+    let saveContent = tab.content;
+    if (tab.eol === 'CRLF') saveContent = saveContent.replace(/\n/g, '\r\n');
+    else if (tab.eol === 'CR') saveContent = saveContent.replace(/\n/g, '\r');
 
-    const result = await window.electronAPI.saveFileAs(tab.filename, tab.content);
+    const result = await window.electronAPI.saveFileAs(tab.filename, saveContent, tab.encoding);
     if (result.success) {
       tab.filename = result.name;
       tab.filePath = result.path;
@@ -2902,6 +3324,37 @@ toast('CamPad loaded — Ctrl+Shift+P for commands', 'info');
   };
 
   overlay.onclick = (e) => { if (e.target === overlay) hideDialog(); };
+
+  // Hook for command palette "Check for Updates"
+  window.addEventListener('campad-check-updates', async () => {
+    uTitle.textContent = 'Kollar efter uppdateringar...';
+    info.textContent = 'Ansluter...';
+    notes.style.display = 'none';
+    progress.style.display = 'none';
+    setActions([{ label: 'Avbryt', action: hideDialog }]);
+    showDialog();
+
+    const [remote, local] = await Promise.all([
+      window.electronAPI.checkForUpdates().catch(e => ({ success: false, error: e.message })),
+      window.electronAPI.checkLocalUpdates()
+    ]);
+
+    if (!remote.success || !remote.version) {
+      if (local.success && local.hasUpdate) {
+        uTitle.textContent = 'Lokal patch hittad!';
+        info.innerHTML = `Version <span class="update-version">${local.version}</span> finns i den lokala patchmappen.`;
+        setActions([
+          { label: 'Avbryt', action: hideDialog },
+          { label: 'Installera', primary: true, action: () => window.electronAPI.installLocalUpdate(local.installerPath) }
+        ]);
+      } else {
+        const ver = await window.electronAPI.getAppVersion();
+        uTitle.textContent = 'Redan uppdaterad';
+        info.textContent = `Du kör senaste versionen (${ver}).`;
+        setActions([{ label: 'OK', primary: true, action: hideDialog }]);
+      }
+    }
+  });
 })();
 
 // ══════════════════════════════════════════════════

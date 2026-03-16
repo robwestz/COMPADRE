@@ -21,6 +21,7 @@ var CM = (() => {
   var cm_bundle_exports = {};
   __export(cm_bundle_exports, {
     Compartment: () => Compartment,
+    EditorSelection: () => EditorSelection,
     EditorState: () => EditorState,
     EditorView: () => EditorView,
     HighlightStyle: () => HighlightStyle,
@@ -45,6 +46,7 @@ var CM = (() => {
     historyKeymap: () => historyKeymap,
     html: () => html,
     indentOnInput: () => indentOnInput,
+    indentUnit: () => indentUnit,
     indentWithTab: () => indentWithTab,
     javascript: () => javascript,
     json: () => json,
